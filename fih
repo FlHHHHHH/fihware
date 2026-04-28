@@ -1,0 +1,758 @@
+-- ============================================================
+--  fihware UI Library  v1.0
+--  A clean, dark gaming UI for Roblox
+-- ============================================================
+
+local TweenService  = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService    = game:GetService("RunService")
+
+local fihware = {}
+fihware.__index = fihware
+
+-- ── Palette ──────────────────────────────────────────────────
+local C = {
+    bg        = Color3.fromRGB(10,  12,  18),
+    surface   = Color3.fromRGB(16,  19,  28),
+    elevated  = Color3.fromRGB(22,  26,  38),
+    border    = Color3.fromRGB(35,  42,  60),
+    accent    = Color3.fromRGB(0,   210, 180),
+    accentDim = Color3.fromRGB(0,   130, 110),
+    accentGlow= Color3.fromRGB(0,   255, 220),
+    text      = Color3.fromRGB(220, 230, 245),
+    textDim   = Color3.fromRGB(110, 125, 155),
+    textMuted = Color3.fromRGB(65,  75,  100),
+    danger    = Color3.fromRGB(255, 80,  80),
+    success   = Color3.fromRGB(60,  220, 130),
+    warn      = Color3.fromRGB(255, 190, 40),
+}
+
+-- ── Tween helpers ────────────────────────────────────────────
+local function tween(obj, props, t, style, dir)
+    local info = TweenInfo.new(t or 0.18, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out)
+    TweenService:Create(obj, info, props):Play()
+end
+
+local function spring(obj, props, t)
+    tween(obj, props, t or 0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+end
+
+-- ── Utility ──────────────────────────────────────────────────
+local function new(class, props)
+    local obj = Instance.new(class)
+    for k, v in pairs(props or {}) do
+        obj[k] = v
+    end
+    return obj
+end
+
+local function corner(obj, radius)
+    local c = new("UICorner", { CornerRadius = UDim.new(0, radius or 6) })
+    c.Parent = obj
+    return c
+end
+
+local function stroke(obj, color, thickness, transparency)
+    local s = new("UIStroke", {
+        Color        = color or C.border,
+        Thickness    = thickness or 1,
+        Transparency = transparency or 0,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    })
+    s.Parent = obj
+    return s
+end
+
+local function gradient(obj, fromColor, toColor, rotation)
+    local g = new("UIGradient", {
+        Color    = ColorSequence.new(fromColor, toColor),
+        Rotation = rotation or 90,
+    })
+    g.Parent = obj
+    return g
+end
+
+local function makeDraggable(frame, handle)
+    local drag, startPos, startMouse = false, nil, nil
+    handle.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            drag      = true
+            startPos  = frame.Position
+            startMouse = i.Position
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if drag and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            local delta = i.Position - startMouse
+            frame.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            drag = false
+        end
+    end)
+end
+
+-- ── Notification queue ───────────────────────────────────────
+local notifHolder = nil
+local notifCount  = 0
+
+local function ensureNotifHolder(gui)
+    if notifHolder and notifHolder.Parent then return notifHolder end
+    notifHolder = new("Frame", {
+        Name             = "NotifHolder",
+        AnchorPoint      = Vector2.new(1, 1),
+        Position         = UDim2.new(1, -18, 1, -18),
+        Size             = UDim2.new(0, 310, 1, -18),
+        BackgroundTransparency = 1,
+        Parent           = gui,
+    })
+    local list = new("UIListLayout", {
+        SortOrder        = Enum.SortOrder.LayoutOrder,
+        VerticalAlignment= Enum.VerticalAlignment.Bottom,
+        Padding          = UDim.new(0, 8),
+    })
+    list.Parent = notifHolder
+    return notifHolder
+end
+
+local function sendNotif(gui, opts)
+    notifCount += 1
+    local holder = ensureNotifHolder(gui)
+
+    local accent = opts.Type == "error"   and C.danger
+                or opts.Type == "success" and C.success
+                or opts.Type == "warn"    and C.warn
+                or C.accent
+
+    local card = new("Frame", {
+        Name             = "Notif_" .. notifCount,
+        Size             = UDim2.new(1, 0, 0, 0),
+        AutomaticSize    = Enum.AutomaticSize.Y,
+        BackgroundColor3 = C.surface,
+        BackgroundTransparency = 1,
+        ClipsDescendants = true,
+        LayoutOrder      = notifCount,
+        Parent           = holder,
+    })
+    corner(card, 8)
+    stroke(card, accent, 1, 0.5)
+
+    -- accent strip
+    local strip = new("Frame", {
+        Size             = UDim2.new(0, 3, 1, 0),
+        Position         = UDim2.new(0, 0, 0, 0),
+        BackgroundColor3 = accent,
+        BorderSizePixel  = 0,
+        Parent           = card,
+    })
+    corner(strip, 3)
+
+    local inner = new("Frame", {
+        Size             = UDim2.new(1, -14, 1, 0),
+        Position         = UDim2.new(0, 14, 0, 0),
+        AutomaticSize    = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        Parent           = card,
+    })
+
+    local pad = new("UIPadding", { PaddingTop=UDim.new(0,10), PaddingBottom=UDim.new(0,10), PaddingRight=UDim.new(0,10) })
+    pad.Parent = inner
+
+    new("TextLabel", {
+        Size             = UDim2.new(1, 0, 0, 0),
+        AutomaticSize    = Enum.AutomaticSize.Y,
+        Text             = opts.Title or "Notice",
+        Font             = Enum.Font.GothamBold,
+        TextSize         = 13,
+        TextColor3       = accent,
+        TextXAlignment   = Enum.TextXAlignment.Left,
+        BackgroundTransparency = 1,
+        Parent           = inner,
+    })
+
+    if opts.Content and opts.Content ~= "" then
+        new("TextLabel", {
+            Size             = UDim2.new(1, 0, 0, 0),
+            AutomaticSize    = Enum.AutomaticSize.Y,
+            Position         = UDim2.new(0, 0, 0, 20),
+            Text             = opts.Content,
+            Font             = Enum.Font.Gotham,
+            TextSize         = 11,
+            TextColor3       = C.textDim,
+            TextXAlignment   = Enum.TextXAlignment.Left,
+            TextWrapped      = true,
+            BackgroundTransparency = 1,
+            Parent           = inner,
+        })
+    end
+
+    -- progress bar
+    local bar = new("Frame", {
+        Size             = UDim2.new(1, 0, 0, 2),
+        Position         = UDim2.new(0, 0, 1, -2),
+        BackgroundColor3 = accent,
+        BorderSizePixel  = 0,
+        Parent           = card,
+    })
+    corner(bar, 1)
+
+    -- animate in
+    task.spawn(function()
+        tween(card, { BackgroundTransparency = 0.08 }, 0.22)
+        local dur = opts.Duration or 5
+        tween(bar, { Size = UDim2.new(0, 0, 0, 2) }, dur, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+        task.wait(dur)
+        tween(card, { BackgroundTransparency = 1 }, 0.3)
+        task.wait(0.35)
+        card:Destroy()
+    end)
+end
+
+-- ╔══════════════════════════════════════════════════════════╗
+--  CREATE WINDOW
+-- ╚══════════════════════════════════════════════════════════╝
+function fihware:CreateWindow(opts)
+    local gui = new("ScreenGui", {
+        Name                   = "fihware_" .. (opts.Name or "Window"),
+        ResetOnSpawn           = false,
+        IgnoreGuiInset         = true,
+        DisplayOrder           = 999,
+        ZIndexBehavior         = Enum.ZIndexBehavior.Sibling,
+        Parent                 = game:GetService("CoreGui"),
+    })
+
+    -- ── Window frame ────────────────────────────────────────
+    local win = new("Frame", {
+        Name             = "Window",
+        AnchorPoint      = Vector2.new(0.5, 0.5),
+        Position         = UDim2.new(0.5, 0, 0.5, 0),
+        Size             = UDim2.new(0, 540, 0, 400),
+        BackgroundColor3 = C.bg,
+        BorderSizePixel  = 0,
+        ClipsDescendants = false,
+        Parent           = gui,
+    })
+    corner(win, 12)
+
+    -- subtle glow shadow
+    local shadow = new("ImageLabel", {
+        Name             = "Shadow",
+        AnchorPoint      = Vector2.new(0.5, 0.5),
+        Position         = UDim2.new(0.5, 0, 0.5, 6),
+        Size             = UDim2.new(1, 60, 1, 60),
+        BackgroundTransparency = 1,
+        Image            = "rbxassetid://6014261993",
+        ImageColor3      = Color3.fromRGB(0, 180, 155),
+        ImageTransparency= 0.82,
+        ScaleType        = Enum.ScaleType.Slice,
+        SliceCenter      = Rect.new(49, 49, 450, 450),
+        ZIndex           = 0,
+        Parent           = win,
+    })
+
+    -- outer border
+    stroke(win, C.border, 1)
+
+    -- ── Title bar ───────────────────────────────────────────
+    local titleBar = new("Frame", {
+        Name             = "TitleBar",
+        Size             = UDim2.new(1, 0, 0, 44),
+        BackgroundColor3 = C.surface,
+        BorderSizePixel  = 0,
+        Parent           = win,
+    })
+    -- top corners only via gradient trick + manual corner
+    corner(titleBar, 12)
+    -- hide bottom radius
+    new("Frame", {
+        Size             = UDim2.new(1, 0, 0, 12),
+        Position         = UDim2.new(0, 0, 1, -12),
+        BackgroundColor3 = C.surface,
+        BorderSizePixel  = 0,
+        Parent           = titleBar,
+    })
+
+    -- accent line under title
+    local accentLine = new("Frame", {
+        Size             = UDim2.new(1, 0, 0, 1),
+        Position         = UDim2.new(0, 0, 1, 0),
+        BackgroundColor3 = C.accent,
+        BorderSizePixel  = 0,
+        Parent           = titleBar,
+    })
+    gradient(accentLine, C.accent, C.accentDim, 0)
+
+    -- logo dot
+    local dot = new("Frame", {
+        Size             = UDim2.new(0, 8, 0, 8),
+        Position         = UDim2.new(0, 16, 0.5, -4),
+        BackgroundColor3 = C.accent,
+        BorderSizePixel  = 0,
+        Parent           = titleBar,
+    })
+    corner(dot, 4)
+
+    -- title text
+    new("TextLabel", {
+        Size             = UDim2.new(1, -80, 1, 0),
+        Position         = UDim2.new(0, 32, 0, 0),
+        Text             = opts.Name or "fihware",
+        Font             = Enum.Font.GothamBold,
+        TextSize         = 14,
+        TextColor3       = C.text,
+        TextXAlignment   = Enum.TextXAlignment.Left,
+        BackgroundTransparency = 1,
+        Parent           = titleBar,
+    })
+
+    -- brand label
+    new("TextLabel", {
+        Size             = UDim2.new(0, 70, 1, 0),
+        Position         = UDim2.new(1, -76, 0, 0),
+        Text             = "fihware",
+        Font             = Enum.Font.GothamBold,
+        TextSize         = 11,
+        TextColor3       = C.accent,
+        TextXAlignment   = Enum.TextXAlignment.Right,
+        BackgroundTransparency = 1,
+        Parent           = titleBar,
+    })
+
+    -- close button
+    local closeBtn = new("TextButton", {
+        Size             = UDim2.new(0, 30, 0, 30),
+        Position         = UDim2.new(1, -40, 0.5, -15),
+        Text             = "✕",
+        Font             = Enum.Font.GothamBold,
+        TextSize         = 12,
+        TextColor3       = C.textMuted,
+        BackgroundColor3 = C.elevated,
+        BorderSizePixel  = 0,
+        Parent           = titleBar,
+    })
+    corner(closeBtn, 6)
+    closeBtn.MouseEnter:Connect(function()
+        tween(closeBtn, { TextColor3 = C.danger, BackgroundColor3 = Color3.fromRGB(60, 20, 20) })
+    end)
+    closeBtn.MouseLeave:Connect(function()
+        tween(closeBtn, { TextColor3 = C.textMuted, BackgroundColor3 = C.elevated })
+    end)
+    closeBtn.Activated:Connect(function()
+        tween(win, { Size = UDim2.new(0, 540, 0, 0) }, 0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+        task.wait(0.28)
+        gui:Destroy()
+    end)
+
+    makeDraggable(win, titleBar)
+
+    -- ── Tab bar ─────────────────────────────────────────────
+    local tabBar = new("Frame", {
+        Name             = "TabBar",
+        Size             = UDim2.new(0, 140, 1, -45),
+        Position         = UDim2.new(0, 0, 0, 45),
+        BackgroundColor3 = C.surface,
+        BorderSizePixel  = 0,
+        ClipsDescendants = true,
+        Parent           = win,
+    })
+
+    -- right border of sidebar
+    new("Frame", {
+        Size             = UDim2.new(0, 1, 1, 0),
+        Position         = UDim2.new(1, 0, 0, 0),
+        BackgroundColor3 = C.border,
+        BorderSizePixel  = 0,
+        Parent           = tabBar,
+    })
+
+    local tabList = new("UIListLayout", {
+        SortOrder       = Enum.SortOrder.LayoutOrder,
+        Padding         = UDim.new(0, 4),
+        Parent          = tabBar,
+    })
+    new("UIPadding", {
+        PaddingTop  = UDim.new(0, 10),
+        PaddingLeft = UDim.new(0, 8),
+        PaddingRight= UDim.new(0, 8),
+        Parent      = tabBar,
+    })
+
+    -- ── Content area ────────────────────────────────────────
+    local contentArea = new("Frame", {
+        Name             = "Content",
+        Size             = UDim2.new(1, -140, 1, -45),
+        Position         = UDim2.new(0, 140, 0, 45),
+        BackgroundColor3 = C.bg,
+        BorderSizePixel  = 0,
+        ClipsDescendants = true,
+        Parent           = win,
+    })
+    corner(contentArea, 0)
+
+    -- ── Window object ───────────────────────────────────────
+    local windowObj = {
+        _gui         = gui,
+        _win         = win,
+        _tabBar      = tabBar,
+        _contentArea = contentArea,
+        _tabs        = {},
+        _activeTab   = nil,
+    }
+
+    -- entrance animation
+    win.Size = UDim2.new(0, 540, 0, 0)
+    win.BackgroundTransparency = 1
+    spring(win, { Size = UDim2.new(0, 540, 0, 400) })
+    tween(win, { BackgroundTransparency = 0 }, 0.3)
+
+    function windowObj:Notify(opts2)
+        sendNotif(gui, opts2)
+    end
+
+    function windowObj:CreateTab(name, _icon)
+        local tabIndex = #self._tabs + 1
+
+        -- sidebar button
+        local btn = new("TextButton", {
+            Name             = "Tab_" .. name,
+            Size             = UDim2.new(1, 0, 0, 34),
+            Text             = "",
+            BackgroundColor3 = C.elevated,
+            BackgroundTransparency = 1,
+            BorderSizePixel  = 0,
+            LayoutOrder      = tabIndex,
+            Parent           = tabBar,
+        })
+        corner(btn, 7)
+
+        -- active pill
+        local pill = new("Frame", {
+            Name             = "Pill",
+            Size             = UDim2.new(0, 3, 0.7, 0),
+            Position         = UDim2.new(0, 0, 0.15, 0),
+            BackgroundColor3 = C.accent,
+            BackgroundTransparency = 1,
+            BorderSizePixel  = 0,
+            Parent           = btn,
+        })
+        corner(pill, 2)
+
+        new("TextLabel", {
+            Size             = UDim2.new(1, -18, 1, 0),
+            Position         = UDim2.new(0, 14, 0, 0),
+            Text             = name,
+            Font             = Enum.Font.Gotham,
+            TextSize         = 12,
+            TextColor3       = C.textDim,
+            TextXAlignment   = Enum.TextXAlignment.Left,
+            BackgroundTransparency = 1,
+            Parent           = btn,
+        })
+
+        -- content page (scrollable)
+        local page = new("ScrollingFrame", {
+            Name                    = "Page_" .. name,
+            Size                    = UDim2.new(1, 0, 1, 0),
+            BackgroundTransparency  = 1,
+            BorderSizePixel         = 0,
+            ScrollBarThickness      = 3,
+            ScrollBarImageColor3    = C.accent,
+            CanvasSize              = UDim2.new(0, 0, 0, 0),
+            AutomaticCanvasSize     = Enum.AutomaticSize.Y,
+            Visible                 = false,
+            Parent                  = contentArea,
+        })
+
+        local pageList = new("UIListLayout", {
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            Padding   = UDim.new(0, 6),
+            Parent    = page,
+        })
+        new("UIPadding", {
+            PaddingTop    = UDim.new(0, 14),
+            PaddingBottom = UDim.new(0, 14),
+            PaddingLeft   = UDim.new(0, 14),
+            PaddingRight  = UDim.new(0, 14),
+            Parent        = page,
+        })
+
+        -- tab object
+        local tabObj = {
+            _btn  = btn,
+            _pill = pill,
+            _page = page,
+            _itemIndex = 0,
+            _window = windowObj,
+        }
+
+        local function activateTab()
+            -- deactivate all
+            for _, t in ipairs(windowObj._tabs) do
+                tween(t._btn,  { BackgroundTransparency = 1 })
+                tween(t._pill, { BackgroundTransparency = 1 })
+                local lbl = t._btn:FindFirstChildOfClass("TextLabel")
+                if lbl then tween(lbl, { TextColor3 = C.textDim, TextSize = 12 }) end
+                t._page.Visible = false
+            end
+            -- activate this
+            tween(btn,  { BackgroundTransparency = 0.5, BackgroundColor3 = C.elevated })
+            tween(pill, { BackgroundTransparency = 0 })
+            local lbl = btn:FindFirstChildOfClass("TextLabel")
+            if lbl then tween(lbl, { TextColor3 = C.text, TextSize = 12 }) end
+            page.Visible = true
+            windowObj._activeTab = tabObj
+        end
+
+        btn.Activated:Connect(activateTab)
+        btn.MouseEnter:Connect(function()
+            if windowObj._activeTab ~= tabObj then
+                tween(btn, { BackgroundTransparency = 0.7, BackgroundColor3 = C.elevated })
+                local lbl = btn:FindFirstChildOfClass("TextLabel")
+                if lbl then tween(lbl, { TextColor3 = Color3.fromRGB(160, 175, 200) }) end
+            end
+        end)
+        btn.MouseLeave:Connect(function()
+            if windowObj._activeTab ~= tabObj then
+                tween(btn, { BackgroundTransparency = 1 })
+                local lbl = btn:FindFirstChildOfClass("TextLabel")
+                if lbl then tween(lbl, { TextColor3 = C.textDim }) end
+            end
+        end)
+
+        table.insert(windowObj._tabs, tabObj)
+        if #windowObj._tabs == 1 then activateTab() end
+
+        -- ── helpers to build elements ────────────────────────
+        local function nextOrder()
+            tabObj._itemIndex += 1
+            return tabObj._itemIndex
+        end
+
+        -- SECTION ──────────────────────────────────────────
+        function tabObj:CreateSection(name2)
+            local row = new("Frame", {
+                Size             = UDim2.new(1, 0, 0, 28),
+                BackgroundTransparency = 1,
+                LayoutOrder      = nextOrder(),
+                Parent           = page,
+            })
+            new("TextLabel", {
+                Size             = UDim2.new(1, 0, 1, 0),
+                Text             = name2:upper(),
+                Font             = Enum.Font.GothamBold,
+                TextSize         = 9,
+                TextColor3       = C.accent,
+                TextXAlignment   = Enum.TextXAlignment.Left,
+                LetterSpacing    = 2,
+                BackgroundTransparency = 1,
+                Parent           = row,
+            })
+            local line = new("Frame", {
+                Size             = UDim2.new(1, 0, 0, 1),
+                Position         = UDim2.new(0, 0, 1, -1),
+                BackgroundColor3 = C.border,
+                BorderSizePixel  = 0,
+                Parent           = row,
+            })
+        end
+
+        -- TOGGLE ───────────────────────────────────────────
+        function tabObj:CreateToggle(opts3)
+            local val = opts3.CurrentValue or false
+
+            local row = new("Frame", {
+                Size             = UDim2.new(1, 0, 0, 42),
+                BackgroundColor3 = C.elevated,
+                BorderSizePixel  = 0,
+                LayoutOrder      = nextOrder(),
+                Parent           = page,
+            })
+            corner(row, 8)
+            stroke(row, C.border)
+
+            -- hover
+            local hBtn = new("TextButton", {
+                Size             = UDim2.new(1, 0, 1, 0),
+                BackgroundTransparency = 1,
+                Text             = "",
+                Parent           = row,
+            })
+
+            new("TextLabel", {
+                Size             = UDim2.new(1, -70, 1, 0),
+                Position         = UDim2.new(0, 14, 0, 0),
+                Text             = opts3.Name or "Toggle",
+                Font             = Enum.Font.Gotham,
+                TextSize         = 12,
+                TextColor3       = C.text,
+                TextXAlignment   = Enum.TextXAlignment.Left,
+                BackgroundTransparency = 1,
+                Parent           = row,
+            })
+
+            -- track
+            local track = new("Frame", {
+                Size             = UDim2.new(0, 40, 0, 22),
+                Position         = UDim2.new(1, -54, 0.5, -11),
+                BackgroundColor3 = val and C.accent or C.border,
+                BorderSizePixel  = 0,
+                Parent           = row,
+            })
+            corner(track, 11)
+
+            -- thumb
+            local thumb = new("Frame", {
+                Size             = UDim2.new(0, 16, 0, 16),
+                Position         = val and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8),
+                BackgroundColor3 = Color3.new(1, 1, 1),
+                BorderSizePixel  = 0,
+                Parent           = track,
+            })
+            corner(thumb, 8)
+
+            local function setToggle(v, fireCallback)
+                val = v
+                if v then
+                    tween(track, { BackgroundColor3 = C.accent })
+                    tween(thumb, { Position = UDim2.new(1, -19, 0.5, -8) })
+                else
+                    tween(track, { BackgroundColor3 = C.border })
+                    tween(thumb, { Position = UDim2.new(0, 3, 0.5, -8) })
+                end
+                if fireCallback and opts3.Callback then
+                    pcall(opts3.Callback, v)
+                end
+            end
+
+            hBtn.Activated:Connect(function()
+                setToggle(not val, true)
+            end)
+            hBtn.MouseEnter:Connect(function()
+                tween(row, { BackgroundColor3 = Color3.fromRGB(28, 33, 48) })
+            end)
+            hBtn.MouseLeave:Connect(function()
+                tween(row, { BackgroundColor3 = C.elevated })
+            end)
+
+            setToggle(val, false)
+
+            local toggleObj = {}
+            function toggleObj:Set(v) setToggle(v, true) end
+            function toggleObj:Get() return val end
+            return toggleObj
+        end
+
+        -- BUTTON ───────────────────────────────────────────
+        function tabObj:CreateButton(opts3)
+            local row = new("TextButton", {
+                Size             = UDim2.new(1, 0, 0, 40),
+                BackgroundColor3 = C.elevated,
+                Text             = "",
+                BorderSizePixel  = 0,
+                LayoutOrder      = nextOrder(),
+                Parent           = page,
+            })
+            corner(row, 8)
+            stroke(row, C.border)
+
+            local label = new("TextLabel", {
+                Size             = UDim2.new(1, 0, 1, 0),
+                Text             = opts3.Name or "Button",
+                Font             = Enum.Font.GothamBold,
+                TextSize         = 12,
+                TextColor3       = C.accent,
+                BackgroundTransparency = 1,
+                Parent           = row,
+            })
+
+            -- shimmer on click
+            row.Activated:Connect(function()
+                tween(row, { BackgroundColor3 = Color3.fromRGB(0, 55, 48) }, 0.1)
+                task.wait(0.1)
+                tween(row, { BackgroundColor3 = C.elevated }, 0.25)
+                if opts3.Callback then pcall(opts3.Callback) end
+            end)
+            row.MouseEnter:Connect(function()
+                tween(row, { BackgroundColor3 = Color3.fromRGB(28, 33, 48) })
+                tween(label, { TextColor3 = C.accentGlow })
+            end)
+            row.MouseLeave:Connect(function()
+                tween(row, { BackgroundColor3 = C.elevated })
+                tween(label, { TextColor3 = C.accent })
+            end)
+        end
+
+        -- INPUT ────────────────────────────────────────────
+        function tabObj:CreateInput(opts3)
+            local containerH = 60
+
+            local row = new("Frame", {
+                Size             = UDim2.new(1, 0, 0, containerH),
+                BackgroundColor3 = C.elevated,
+                BorderSizePixel  = 0,
+                LayoutOrder      = nextOrder(),
+                Parent           = page,
+            })
+            corner(row, 8)
+            stroke(row, C.border)
+
+            new("TextLabel", {
+                Size             = UDim2.new(1, -16, 0, 22),
+                Position         = UDim2.new(0, 14, 0, 0),
+                Text             = opts3.Name or "Input",
+                Font             = Enum.Font.Gotham,
+                TextSize         = 11,
+                TextColor3       = C.textDim,
+                TextXAlignment   = Enum.TextXAlignment.Left,
+                BackgroundTransparency = 1,
+                Parent           = row,
+            })
+
+            local inputBg = new("Frame", {
+                Size             = UDim2.new(1, -28, 0, 26),
+                Position         = UDim2.new(0, 14, 0, 22),
+                BackgroundColor3 = C.bg,
+                BorderSizePixel  = 0,
+                Parent           = row,
+            })
+            corner(inputBg, 5)
+            local inputStroke = stroke(inputBg, C.border)
+
+            local box = new("TextBox", {
+                Size             = UDim2.new(1, -16, 1, 0),
+                Position         = UDim2.new(0, 8, 0, 0),
+                BackgroundTransparency = 1,
+                PlaceholderText  = opts3.PlaceholderText or "",
+                PlaceholderColor3= C.textMuted,
+                Text             = "",
+                Font             = Enum.Font.Gotham,
+                TextSize         = 11,
+                TextColor3       = C.text,
+                TextXAlignment   = Enum.TextXAlignment.Left,
+                ClearTextOnFocus = false,
+                Parent           = inputBg,
+            })
+
+            box.Focused:Connect(function()
+                tween(inputStroke, { Color = C.accent })
+            end)
+            box.FocusLost:Connect(function(enter)
+                tween(inputStroke, { Color = C.border })
+                if opts3.Callback then pcall(opts3.Callback, box.Text) end
+                if opts3.RemoveTextAfterFocusLost then box.Text = "" end
+            end)
+        end
+
+        return tabObj
+    end
+
+    return windowObj
+end
+
+-- ── Bootstrap ────────────────────────────────────────────────
+return fihware
