@@ -1,6 +1,13 @@
 -- ================================================================
---   🐟 fihware UI Library  v2.0
+--   🐟 fihware UI Library  v2.1
 --   Vape V4-inspired — side-by-side windows, polished aesthetic
+--
+--   Changes in v2.1:
+--     · Side windows are NOT draggable; they follow the main nav
+--     · _reflowWindows() lays windows out in creation order, no drift
+--     · Spam open/close no longer causes positional shuffle
+--     · Dragging the nav instantly repositions all open windows
+--     · General polish pass
 --
 --   Usage:
 --     local Fihware = loadstring(game:HttpGet(URL))()
@@ -89,7 +96,7 @@ function Fihware.new()
     }
 
     self.SavedObjects   = {}
-    self.Windows        = {}
+    self.Windows        = {}   -- ordered list of all created windows
     self.WindowGap      = 8
     self.WindowWidth    = 215
     self.MainNavWidth   = 178
@@ -205,7 +212,8 @@ local function shadow(parent, transparency)
     return img
 end
 
-local function makeDraggable(frame, handle, onDragStart)
+-- onDragMove fires every frame while dragging (used to follow nav with windows)
+local function makeDraggable(frame, handle, onDragStart, onDragMove)
     handle = handle or frame
     local dragging, dragStart, startPos
     handle.InputBegan:Connect(function(i)
@@ -225,6 +233,7 @@ local function makeDraggable(frame, handle, onDragStart)
                 startPos.X.Scale, startPos.X.Offset + d.X,
                 startPos.Y.Scale, startPos.Y.Offset + d.Y
             )
+            if onDragMove then onDragMove() end
         end
     end)
     UserInputService.InputEnded:Connect(function(i)
@@ -486,27 +495,42 @@ function Fihware:Toggle()
 end
 
 -- ================================================================
--- SIDE-BY-SIDE WINDOW POSITIONING
+-- WINDOW REFLOW  (replaces old _getNextWindowPosition)
+--
+--   Iterates self.Windows in creation order.
+--   Every visible window is assigned a position directly to the
+--   right of the previous one.  Windows currently mid-open-
+--   animation (_opening == true) have their canonical position
+--   updated but are NOT tweened (the open animation handles it).
+--   instant == true  →  set position directly (used while dragging
+--                        the nav so there is no lag).
 -- ================================================================
-function Fihware:_getNextWindowPosition(skipWin)
-    local mainNavRight = self.MainNavRef
-        and (self.MainNavRef.Position.X.Offset + self.MainNavRef.Size.X.Offset)
-        or 6
-    local mainNavY = self.MainNavRef and self.MainNavRef.Position.Y.Offset or 6
+function Fihware:_reflowWindows(instant)
+    if not self.MainNavRef then return end
+    local nav = self.MainNavRef
+    -- Width is always constant; use the stored constant to avoid
+    -- reading a mid-tween size value.
+    local x = nav.Position.X.Offset + self.MainNavWidth + self.WindowGap
+    local y = nav.Position.Y.Offset
 
-    local maxRight = mainNavRight
     for _, w in ipairs(self.Windows) do
-        if w ~= skipWin and w.Frame.Visible then
-            local right = w.Frame.Position.X.Offset + w.Frame.Size.X.Offset
-            if right > maxRight then maxRight = right end
+        if w.Frame.Visible then
+            local pos = UDim2.new(0, x, 0, y)
+            w._canonicalPos = pos
+            if instant then
+                -- Hard-set; used during nav drag so windows stick to it
+                w.Frame.Position = pos
+            elseif not w._opening then
+                -- Smooth settle; skip windows doing their open slide
+                tween(w.Frame, { Position = pos }, 0.22, Enum.EasingStyle.Quart)
+            end
+            x = x + self.WindowWidth + self.WindowGap
         end
     end
-
-    return UDim2.new(0, maxRight + self.WindowGap, 0, mainNavY)
 end
 
 -- ================================================================
--- CREATE MAIN WINDOW (left sidebar nav)
+-- CREATE MAIN WINDOW  (left sidebar nav)
 -- ================================================================
 function Fihware:CreateMainWindow(config)
     config = config or {}
@@ -530,7 +554,7 @@ function Fihware:CreateMainWindow(config)
     shadow(nav, 0.55)
     lib.MainNavRef = nav
 
-    -- header
+    -- header ──────────────────────────────────────────────────────
     local header = Instance.new("Frame")
     header.Name             = "Header"
     header.Size             = UDim2.new(1, 0, 0, 42)
@@ -573,7 +597,7 @@ function Fihware:CreateMainWindow(config)
     verLabel.Position         = UDim2.new(1, -10, 0.5, 0)
     verLabel.BackgroundColor3 = lib.Theme.Background
     verLabel.BorderSizePixel  = 0
-    verLabel.Text             = "v2.0"
+    verLabel.Text             = "v2.1"
     verLabel.TextSize         = 10
     verLabel.Font             = Enum.Font.GothamBold
     verLabel.TextColor3       = lib.Theme.SubText
@@ -582,8 +606,12 @@ function Fihware:CreateMainWindow(config)
     corner(verLabel, 4)
     stroke(verLabel, lib.Theme.Border)
 
-    makeDraggable(nav, header)
+    -- Dragging the nav moves all open windows with it (instant, no lag)
+    makeDraggable(nav, header, nil, function()
+        lib:_reflowWindows(true)
+    end)
 
+    -- nav scroll area ─────────────────────────────────────────────
     local navScroll = Instance.new("ScrollingFrame")
     navScroll.Name                   = "NavScroll"
     navScroll.Size                   = UDim2.new(1, 0, 1, -42)
@@ -608,7 +636,7 @@ function Fihware:CreateMainWindow(config)
     local Main = {}
     Main._nav = nav
 
-    -- keybind toggle
+    -- keybind toggle ──────────────────────────────────────────────
     local keyCon = UserInputService.InputBegan:Connect(function(input, gp)
         if not gp and input.KeyCode == lib.CurrentKeybind then
             lib:Toggle()
@@ -654,21 +682,21 @@ function Fihware:CreateMainWindow(config)
         end
     end
 
-    -- ── Window Toggle Button (nav) ───────────────────────────────
+    -- ── Window Toggle Button (nav) ────────────────────────────────
     function Main:AddWindowButton(name, window, icon)
         elemCount = elemCount + 1
         local active = false
 
         local btn = Instance.new("TextButton")
-        btn.Name             = name .. "NavBtn"
-        btn.Size             = UDim2.new(1, 0, 0, 30)
-        btn.BackgroundColor3 = lib.Theme.Elevated
+        btn.Name                   = name .. "NavBtn"
+        btn.Size                   = UDim2.new(1, 0, 0, 30)
+        btn.BackgroundColor3       = lib.Theme.Elevated
         btn.BackgroundTransparency = 1
-        btn.BorderSizePixel  = 0
-        btn.Text             = ""
-        btn.LayoutOrder      = elemCount
-        btn.AutoButtonColor  = false
-        btn.Parent           = navScroll
+        btn.BorderSizePixel        = 0
+        btn.Text                   = ""
+        btn.LayoutOrder            = elemCount
+        btn.AutoButtonColor        = false
+        btn.Parent                 = navScroll
         corner(btn, 5)
 
         local iconImg
@@ -705,16 +733,11 @@ function Fihware:CreateMainWindow(config)
 
         local function setActive(v)
             active = v
-            if window then
-                if v then
-                    window:SetVisible(true)
-                else
-                    window:SetVisible(false)
-                end
-            end
+            if window then window:SetVisible(v) end
             tween(nameLbl, { TextColor3 = v and lib.Theme.TextBright or lib.Theme.SubText }, 0.15)
             tween(dot,     { BackgroundTransparency = v and 0 or 1 }, 0.15)
-            tween(btn,     { BackgroundTransparency = v and 0 or 1, BackgroundColor3 = lib.Theme.Elevated }, 0.15)
+            tween(btn,     { BackgroundTransparency = v and 0 or 1,
+                             BackgroundColor3 = lib.Theme.Elevated }, 0.15)
             if iconImg then
                 tween(iconImg, { ImageColor3 = v and lib.Theme.Accent or lib.Theme.SubText }, 0.15)
             end
@@ -743,17 +766,14 @@ function Fihware:CreateMainWindow(config)
         }
     end
 
-    function Main:SetKeybind(key)
-        lib.CurrentKeybind = key
-    end
-
-    function Main:GetFrame() return nav end
+    function Main:SetKeybind(key) lib.CurrentKeybind = key end
+    function Main:GetFrame()     return nav end
 
     return Main
 end
 
 -- ================================================================
--- CREATE WINDOW (auto side-by-side)
+-- CREATE WINDOW  (side panel, NOT draggable — follows the nav)
 -- ================================================================
 function Fihware:CreateWindow(config)
     config = config or {}
@@ -768,7 +788,7 @@ function Fihware:CreateWindow(config)
     local win = Instance.new("Frame")
     win.Name             = name .. "Window"
     win.Size             = UDim2.new(0, lib.WindowWidth, 0, 40)
-    win.Position         = config.Position or UDim2.new(0, 200, 0, 6)
+    win.Position         = UDim2.new(0, 200, 0, 6) -- overwritten by reflow on show
     win.BackgroundColor3 = lib.Theme.Surface
     win.BorderSizePixel  = 0
     win.ClipsDescendants = false
@@ -778,7 +798,7 @@ function Fihware:CreateWindow(config)
     stroke(win, lib.Theme.Border)
     shadow(win, 0.55)
 
-    -- titlebar
+    -- titlebar ────────────────────────────────────────────────────
     local tb = Instance.new("Frame")
     tb.Name             = "Titlebar"
     tb.Size             = UDim2.new(1, 0, 0, 40)
@@ -803,7 +823,6 @@ function Fihware:CreateWindow(config)
     tbDivider.ZIndex           = 3
     tbDivider.Parent           = tb
 
-    -- icon
     local iconOffset = 12
     if config.Icon then
         local sizeV = config.IconSize or 15
@@ -831,7 +850,7 @@ function Fihware:CreateWindow(config)
     titleLbl.ZIndex                 = 3
     titleLbl.Parent                 = tb
 
-    -- content scroll
+    -- content scroll ──────────────────────────────────────────────
     local scroll = Instance.new("ScrollingFrame")
     scroll.Name                   = "Content"
     scroll.Size                   = UDim2.new(1, 0, 1, -40)
@@ -855,37 +874,76 @@ function Fihware:CreateWindow(config)
     end
     contentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(refreshSize)
 
+    -- Window object ───────────────────────────────────────────────
     local W = {
         Frame          = win,
         _accentObjects = accentObjs,
-        _userDragged   = false,
+        _canonicalPos  = nil,   -- set by _reflowWindows; the "true" home position
+        _opening       = false, -- true while the slide-in tween is running
+        _wantsVisible  = false,
     }
     table.insert(lib.Windows, W)
 
-    makeDraggable(win, tb, function() W._userDragged = true end)
+    -- NOTE: Windows are intentionally NOT draggable.
+    --       They are positioned exclusively by _reflowWindows so they
+    --       always stay flush with the nav and each other.
 
-    -- ── Visibility (auto side-by-side) ───────────────────────────
+    -- ── Visibility ───────────────────────────────────────────────
+    --
+    --   Open  → reflow (assigns _canonicalPos to all visible windows),
+    --           then slide this window in from slightly left.
+    --   Close → slide this window out left, then hide & reflow the rest.
+    --
+    --   _wantsVisible guards against race conditions from rapid toggling.
+    -- ──────────────────────────────────────────────────────────────
     function W:SetVisible(val)
-        if val and not win.Visible then
-            if not W._userDragged then
-                win.Position = lib:_getNextWindowPosition(W)
-            end
-            local targetPos = win.Position
-            win.Position = targetPos + UDim2.fromOffset(-18, 0)
-            win.Visible = true
-
-            -- subtle slide + fade
-            local tweenObj = tween(win, { Position = targetPos }, 0.28, Enum.EasingStyle.Quart)
-            tween(scroll, { ScrollBarImageTransparency = 0 }, 0.28)
-        elseif not val and win.Visible then
-            local tweenObj = tween(win,
-                { Position = win.Position + UDim2.fromOffset(-12, 0) },
-                0.18, Enum.EasingStyle.Quart)
-            task.delay(0.18, function()
-                if not W._wantsVisible then win.Visible = false end
-            end)
-        end
         W._wantsVisible = val
+
+        if val then
+            if not win.Visible then
+                -- Make frame live so reflow can measure / assign its slot
+                W._opening = true
+                win.Visible = true
+
+                -- Reflow assigns _canonicalPos (skips tween for opening windows)
+                lib:_reflowWindows(false)
+
+                -- Slide in from left of its assigned slot
+                local cp = W._canonicalPos or win.Position
+                win.Position = UDim2.new(0, cp.X.Offset - 20, 0, cp.Y.Offset)
+
+                local t = tween(win, { Position = cp }, 0.28, Enum.EasingStyle.Quart)
+                if t then
+                    t.Completed:Connect(function()
+                        W._opening = false
+                    end)
+                end
+            else
+                -- Already visible (e.g. interrupted mid-close); just settle it
+                W._opening = false
+                lib:_reflowWindows(false)
+            end
+        else
+            if win.Visible then
+                local cp = W._canonicalPos or win.Position
+                tween(win,
+                    { Position = UDim2.new(0, cp.X.Offset - 14, 0, cp.Y.Offset) },
+                    0.18, Enum.EasingStyle.Quart)
+
+                task.delay(0.19, function()
+                    if not W._wantsVisible then
+                        win.Visible = false
+                        -- Reset to canonical so the next open starts clean
+                        if W._canonicalPos then
+                            win.Position = W._canonicalPos
+                        end
+                        W._opening = false
+                        -- Settle the remaining visible windows
+                        lib:_reflowWindows(false)
+                    end
+                end)
+            end
+        end
     end
 
     function W:IsVisible() return win.Visible end
@@ -908,7 +966,7 @@ function Fihware:CreateWindow(config)
         pad(lbl, 0, 4, 0, 4)
 
         local api = {}
-        function api:SetText(t)  lbl.Text = t end
+        function api:SetText(t)  lbl.Text       = t end
         function api:SetColor(c) lbl.TextColor3 = c end
         return api
     end
@@ -951,7 +1009,7 @@ function Fihware:CreateWindow(config)
         end
     end
 
-    -- ── Toggle (Vape-style row button) ──────────────────────────
+    -- ── Toggle ───────────────────────────────────────────────────
     function W:CreateToggle(cfg)
         cfg = cfg or {}
         local enabled = cfg.Default or false
@@ -959,12 +1017,12 @@ function Fihware:CreateWindow(config)
         elemCount     = elemCount + 1
 
         local row = Instance.new("Frame")
-        row.Size             = UDim2.new(1, 0, 0, 30)
-        row.BackgroundColor3 = lib.Theme.Elevated
+        row.Size                   = UDim2.new(1, 0, 0, 30)
+        row.BackgroundColor3       = lib.Theme.Elevated
         row.BackgroundTransparency = 0.4
-        row.BorderSizePixel  = 0
-        row.LayoutOrder      = elemCount
-        row.Parent           = scroll
+        row.BorderSizePixel        = 0
+        row.LayoutOrder            = elemCount
+        row.Parent                 = scroll
         corner(row, 5)
 
         local btn = Instance.new("TextButton")
@@ -975,13 +1033,13 @@ function Fihware:CreateWindow(config)
         btn.Parent                 = row
 
         local accentBar = Instance.new("Frame")
-        accentBar.Size             = UDim2.new(0, 2, 0, 14)
-        accentBar.AnchorPoint      = Vector2.new(0, 0.5)
-        accentBar.Position         = UDim2.new(0, 0, 0.5, 0)
-        accentBar.BackgroundColor3 = lib.Theme.Accent
+        accentBar.Size                   = UDim2.new(0, 2, 0, 14)
+        accentBar.AnchorPoint            = Vector2.new(0, 0.5)
+        accentBar.Position               = UDim2.new(0, 0, 0.5, 0)
+        accentBar.BackgroundColor3       = lib.Theme.Accent
         accentBar.BackgroundTransparency = 1
-        accentBar.BorderSizePixel  = 0
-        accentBar.Parent           = row
+        accentBar.BorderSizePixel        = 0
+        accentBar.Parent                 = row
         corner(accentBar, 1)
         table.insert(accentObjs, { obj = accentBar, type = "BackgroundColor3" })
 
@@ -1047,8 +1105,11 @@ function Fihware:CreateWindow(config)
             enabled     = val
             api.Enabled = val
             tween(accentBar, { BackgroundTransparency = val and 0 or 1 }, 0.15)
-            tween(indFill,   { BackgroundTransparency = val and 0 or 1, Size = val and UDim2.new(0, 8, 0, 8) or UDim2.new(0, 0, 0, 0) }, 0.15)
-            tween(nameLbl,   { TextColor3 = val and lib.Theme.TextBright or lib.Theme.Text }, 0.15)
+            tween(indFill,   {
+                BackgroundTransparency = val and 0 or 1,
+                Size = val and UDim2.new(0, 8, 0, 8) or UDim2.new(0, 0, 0, 0)
+            }, 0.15)
+            tween(nameLbl, { TextColor3 = val and lib.Theme.TextBright or lib.Theme.Text }, 0.15)
             indStroke.Color = val and lib.Theme.Accent or lib.Theme.BorderLight
 
             if not silent then
@@ -1078,7 +1139,10 @@ function Fihware:CreateWindow(config)
             SaveValue    = enabled,
             Load         = function(v) setEnabled(v, true) end,
             UpdateAccent = function(c)
-                if enabled then indFill.BackgroundColor3 = c; accentBar.BackgroundColor3 = c end
+                if enabled then
+                    indFill.BackgroundColor3   = c
+                    accentBar.BackgroundColor3 = c
+                end
             end,
         }
 
@@ -1146,6 +1210,7 @@ function Fihware:CreateWindow(config)
         corner(track, 99)
 
         local pct0 = (value - min) / (max - min)
+
         local fill = Instance.new("Frame")
         fill.Size             = UDim2.new(pct0, 0, 1, 0)
         fill.BackgroundColor3 = lib.Theme.Accent
@@ -1176,7 +1241,8 @@ function Fihware:CreateWindow(config)
         local api      = { Value = value }
 
         local function updateSlider(x)
-            local pct = math.clamp((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+            local pct = math.clamp(
+                (x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
             if decimals > 0 then
                 local mult = 10 ^ decimals
                 value = math.floor((min + (max - min) * pct) * mult + 0.5) / mult
@@ -1235,8 +1301,8 @@ function Fihware:CreateWindow(config)
                 if cfg.Function then pcall(cfg.Function, v) end
             end,
             UpdateAccent = function(c)
-                fill.BackgroundColor3   = c
-                valLbl.TextColor3       = c
+                fill.BackgroundColor3 = c
+                valLbl.TextColor3     = c
             end,
         }
 
@@ -1344,9 +1410,10 @@ function Fihware:CreateWindow(config)
         local function closeDropdown()
             open = false
             tween(dropFrame, { Size = UDim2.new(1, 0, 0, 0) }, 0.13)
-            task.wait(0.14)
-            dropFrame.Visible = false
-            container.Size    = UDim2.new(1, 0, 0, 30)
+            task.delay(0.14, function()
+                dropFrame.Visible = false
+                container.Size    = UDim2.new(1, 0, 0, 30)
+            end)
             tween(arrow, { Rotation = 0 }, 0.13)
         end
 
@@ -1355,10 +1422,11 @@ function Fihware:CreateWindow(config)
                 if c:IsA("Frame") then c:Destroy() end
             end
             for _, item in ipairs(list) do
+                local isSelected = (item == selected)
                 local opt = Instance.new("Frame")
                 opt.Size                   = UDim2.new(1, 0, 0, 26)
-                opt.BackgroundColor3       = item == selected and lib.Theme.ElevatedHvr or Color3.fromRGB(0,0,0)
-                opt.BackgroundTransparency = item == selected and 0 or 1
+                opt.BackgroundColor3       = isSelected and lib.Theme.ElevatedHvr or Color3.fromRGB(0,0,0)
+                opt.BackgroundTransparency = isSelected and 0 or 1
                 opt.BorderSizePixel        = 0
                 opt.ZIndex                 = 11
                 opt.Parent                 = dScroll
@@ -1370,7 +1438,7 @@ function Fihware:CreateWindow(config)
                 optBtn.Text                   = item
                 optBtn.TextSize               = 12
                 optBtn.Font                   = Enum.Font.GothamMedium
-                optBtn.TextColor3             = item == selected and lib.Theme.Accent or lib.Theme.Text
+                optBtn.TextColor3             = isSelected and lib.Theme.Accent or lib.Theme.Text
                 optBtn.TextXAlignment         = Enum.TextXAlignment.Left
                 optBtn.ZIndex                 = 12
                 optBtn.AutoButtonColor        = false
@@ -1379,7 +1447,8 @@ function Fihware:CreateWindow(config)
 
                 optBtn.MouseEnter:Connect(function()
                     if item ~= selected then
-                        tween(opt, { BackgroundTransparency = 0, BackgroundColor3 = lib.Theme.ElevatedHvr }, 0.08)
+                        tween(opt, { BackgroundTransparency = 0,
+                                     BackgroundColor3 = lib.Theme.ElevatedHvr }, 0.08)
                     end
                 end)
                 optBtn.MouseLeave:Connect(function()
@@ -1388,11 +1457,13 @@ function Fihware:CreateWindow(config)
                     end
                 end)
                 optBtn.MouseButton1Click:Connect(function()
-                    selected   = item
-                    api.Value  = item
-                    selLbl.Text = item
+                    selected     = item
+                    api.Value    = item
+                    selLbl.Text  = item
                     if cfg.Function then pcall(cfg.Function, item) end
-                    if lib.SavedObjects[eName] then lib.SavedObjects[eName].SaveValue = item end
+                    if lib.SavedObjects[eName] then
+                        lib.SavedObjects[eName].SaveValue = item
+                    end
                     closeDropdown()
                 end)
             end
@@ -1422,8 +1493,8 @@ function Fihware:CreateWindow(config)
         lib.SavedObjects[eName] = {
             SaveValue = selected,
             Load = function(v)
-                selected   = v
-                api.Value  = v
+                selected    = v
+                api.Value   = v
                 selLbl.Text = v
                 if cfg.Function then pcall(cfg.Function, v) end
             end,
@@ -1539,8 +1610,8 @@ function Fihware:CreateWindow(config)
         end)
 
         lib.SavedObjects[eName] = {
-            SaveValue = value,
-            Load      = function(v) input.Text = v; value = v end,
+            SaveValue    = value,
+            Load         = function(v) input.Text = v; value = v end,
             UpdateAccent = function(c)
                 if input:IsFocused() then inputStroke.Color = c end
             end,
@@ -1552,11 +1623,11 @@ function Fihware:CreateWindow(config)
     -- ── Color Slider (HSV bars) ──────────────────────────────────
     function W:CreateColorSlider(cfg)
         cfg = cfg or {}
-        local eName    = cfg.Name     or "Color"
-        local h        = cfg.DefaultH or 0.58
-        local s        = cfg.DefaultS or 0.69
-        local v        = cfg.DefaultV or 1.0
-        elemCount      = elemCount + 1
+        local eName = cfg.Name     or "Color"
+        local h     = cfg.DefaultH or 0.58
+        local s     = cfg.DefaultS or 0.69
+        local v     = cfg.DefaultV or 1.0
+        elemCount   = elemCount + 1
 
         local row = Instance.new("Frame")
         row.Size                   = UDim2.new(1, 0, 0, 86)
@@ -1661,7 +1732,8 @@ function Fihware:CreateWindow(config)
                 if i.UserInputType == Enum.UserInputType.MouseButton1
                 or i.UserInputType == Enum.UserInputType.Touch then
                     dragging = true
-                    local pct = math.clamp((i.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+                    local pct = math.clamp(
+                        (i.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
                     knob.Position = UDim2.new(pct, 0, 0.5, 0)
                     setter(pct); fire()
                 end
@@ -1669,7 +1741,8 @@ function Fihware:CreateWindow(config)
             UserInputService.InputChanged:Connect(function(i)
                 if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement
                               or i.UserInputType == Enum.UserInputType.Touch) then
-                    local pct = math.clamp((i.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+                    local pct = math.clamp(
+                        (i.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
                     knob.Position = UDim2.new(pct, 0, 0.5, 0)
                     setter(pct); fire()
                 end
@@ -1755,14 +1828,17 @@ function Fihware:CreateWindow(config)
         end)
 
         UserInputService.InputBegan:Connect(function(input, gp)
-            if not gp and capturing and input.UserInputType == Enum.UserInputType.Keyboard then
+            if not gp and capturing
+            and input.UserInputType == Enum.UserInputType.Keyboard then
                 key               = input.KeyCode
                 api.Key           = key
                 capturing         = false
                 keyBtn.Text       = key.Name
                 keyBtn.TextColor3 = lib.Theme.SubText
                 if cfg.Function then pcall(cfg.Function, key) end
-                if lib.SavedObjects[eName] then lib.SavedObjects[eName].SaveValue = key.Name end
+                if lib.SavedObjects[eName] then
+                    lib.SavedObjects[eName].SaveValue = key.Name
+                end
             end
         end)
 
