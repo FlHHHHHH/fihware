@@ -1,6 +1,13 @@
 -- ================================================================
---   🐟 fihware UI Library  v3.3
+--   🐟 fihware UI Library  v3.4
 --   Vape V4 1:1 — modernized, polished, dark-themed
+--
+--   Changes in v3.4:
+--     • Subtle UIGradient on window/header/titlebar surfaces
+--     • Richer dark-mode palette (warmer deep blacks, more contrast)
+--     • Logo pill background now matches header Elevated color exactly
+--     • Settings gear icon button in footer (opens main window's
+--       built-in settings section via callback)
 --
 --   Single-column main window with module nav + inline settings,
 --   side-by-side sub-windows (smooth, auto-sorted).
@@ -104,7 +111,7 @@ end
 
 local function stroke(parent, color, thickness)
     local s = Instance.new("UIStroke")
-    s.Color = color or Color3.fromRGB(34, 33, 35)
+    s.Color = color or Color3.fromRGB(38, 36, 40)
     s.Thickness = thickness or 1
     s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     s.Parent = parent
@@ -147,6 +154,16 @@ local function shadow(parent, transparency)
     return img
 end
 
+-- Adds a subtle vertical gradient to a frame
+-- topColor and bottomColor should be Color3 values
+local function applyGradient(parent, topColor, bottomColor, rotation)
+    local grad = Instance.new("UIGradient")
+    grad.Color    = ColorSequence.new(topColor, bottomColor)
+    grad.Rotation = rotation or 90
+    grad.Parent   = parent
+    return grad
+end
+
 local function tooltip(lib, hostBtn, parentRow, text)
     if not text or not lib.TooltipsEnabled then return end
     local tip = Instance.new("TextLabel")
@@ -178,7 +195,6 @@ end
 local W = {}
 
 function W.section(lib, parent, layoutOrder, name)
-    -- Total height gives breathing room above and below
     local sect = Instance.new("Frame")
     sect.Size                   = UDim2.new(1, 0, 0, 28)
     sect.BackgroundTransparency = 1
@@ -186,7 +202,6 @@ function W.section(lib, parent, layoutOrder, name)
     sect.Parent                 = parent
 
     if name and name ~= "" then
-        -- Measure label so the trailing line can start right after it
         local tw = TextService:GetTextSize(
             name:upper(), 10, Enum.Font.GothamBold, Vector2.new(9999, 9999)).X
 
@@ -201,8 +216,7 @@ function W.section(lib, parent, layoutOrder, name)
         lbl.TextXAlignment         = Enum.TextXAlignment.Left
         lbl.Parent                 = sect
 
-        -- Thin line from end of label to right edge, vertically centered
-        local lineGap = 8   -- gap between label text and the line
+        local lineGap = 8
         local line = Instance.new("Frame")
         line.Size             = UDim2.new(1, -(tw + 6 + lineGap + 6), 0, 1)
         line.AnchorPoint      = Vector2.new(0, 0.5)
@@ -211,7 +225,6 @@ function W.section(lib, parent, layoutOrder, name)
         line.BorderSizePixel  = 0
         line.Parent           = sect
     else
-        -- Nameless divider: full-width hairline
         local line = Instance.new("Frame")
         line.Size             = UDim2.new(1, 0, 0, 1)
         line.AnchorPoint      = Vector2.new(0, 0.5)
@@ -931,7 +944,7 @@ function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
         k.ZIndex           = 2
         k.Parent           = bar
         corner(k, 99)
-        stroke(k, Color3.fromRGB(34, 33, 35))
+        stroke(k, Color3.fromRGB(38, 36, 40))
 
         local hb = Instance.new("TextButton")
         hb.Size                   = UDim2.new(1, 0, 0, 20)
@@ -1121,23 +1134,32 @@ end
 function Fihware.new()
     local self = setmetatable({}, Fihware)
 
+    -- ── Improved dark-mode palette ───────────────────────────────
+    -- Deeper, richer blacks with subtle warm undertone.
+    -- More distinct layering: Background → Surface → Elevated → ElevatedHvr
+    -- Borders are slightly more visible for better depth cues.
     self.Theme = {
         Accent       = Color3.fromRGB(80, 155, 255),
-        AccentDark   = Color3.fromRGB(50, 110, 200),
+        AccentDark   = Color3.fromRGB(48, 108, 200),
         AccentText   = Color3.fromRGB(255, 255, 255),
-        Background   = Color3.fromRGB(13, 12, 14),
-        Surface      = Color3.fromRGB(18, 17, 19),
-        Elevated     = Color3.fromRGB(23, 22, 24),
-        ElevatedHvr  = Color3.fromRGB(31, 30, 32),
-        Border       = Color3.fromRGB(34, 33, 35),
-        BorderLight  = Color3.fromRGB(48, 47, 49),
-        Text         = Color3.fromRGB(208, 208, 210),
-        TextBright   = Color3.fromRGB(238, 238, 240),
-        SubText      = Color3.fromRGB(140, 140, 144),
-        Muted        = Color3.fromRGB(88, 88, 92),
-        Success      = Color3.fromRGB(70, 200, 130),
-        Warning      = Color3.fromRGB(240, 170, 60),
-        Error        = Color3.fromRGB(235, 80, 80),
+        Background   = Color3.fromRGB(9, 9, 11),       -- near-black, cooler
+        Surface      = Color3.fromRGB(14, 13, 16),     -- base window bg
+        Elevated     = Color3.fromRGB(20, 19, 23),     -- slightly lifted panels
+        ElevatedHvr  = Color3.fromRGB(28, 27, 32),     -- hover state
+        Border       = Color3.fromRGB(38, 36, 44),     -- more visible border
+        BorderLight  = Color3.fromRGB(54, 52, 62),     -- lighter border variant
+        Text         = Color3.fromRGB(200, 198, 208),  -- slightly cooler body text
+        TextBright   = Color3.fromRGB(236, 234, 245),  -- near-white with a hint of violet
+        SubText      = Color3.fromRGB(128, 126, 140),  -- muted secondary
+        Muted        = Color3.fromRGB(76, 74, 88),     -- very muted labels
+        Success      = Color3.fromRGB(65, 195, 120),
+        Warning      = Color3.fromRGB(238, 168, 55),
+        Error        = Color3.fromRGB(230, 75, 75),
+        -- Gradient helpers (used by applyGradient)
+        SurfaceTop   = Color3.fromRGB(18, 17, 22),     -- top of window gradient
+        SurfaceBot   = Color3.fromRGB(12, 11, 15),     -- bottom of window gradient
+        HeaderTop    = Color3.fromRGB(26, 25, 30),     -- top of header gradient
+        HeaderBot    = Color3.fromRGB(18, 17, 22),     -- bottom of header gradient
     }
 
     self.SavedObjects   = {}
@@ -1171,6 +1193,10 @@ function Fihware.new()
 
     self.Icons = {}
     for k, v in pairs(Icons) do self.Icons[k] = v end
+
+    -- Callback fired when the footer settings gear is clicked.
+    -- Set this to a function that opens/scrolls to your settings section.
+    self.OnSettingsClick = nil
 
     return self
 end
@@ -1257,7 +1283,6 @@ end
 
 -- ================================================================
 -- NOTIFICATIONS
--- FIX #3: Removed left-edge accent bar — clean flat card style.
 -- ================================================================
 function Fihware:Notify(title, body, duration, accentColor)
     if not self.NotificationsEnabled or not self.NotifHolder then return end
@@ -1274,10 +1299,11 @@ function Fihware:Notify(title, body, duration, accentColor)
     corner(notif, 7)
     stroke(notif, self.Theme.Border)
     shadow(notif, 0.75)
+    -- Subtle gradient on notification card
+    applyGradient(notif, self.Theme.SurfaceTop, self.Theme.SurfaceBot)
 
     tween(notif, { BackgroundTransparency = 0 }, 0.22)
 
-    -- Full-width content, no left stripe
     local inner = Instance.new("Frame")
     inner.Size                   = UDim2.new(1, 0, 1, 0)
     inner.BackgroundTransparency = 1
@@ -1308,7 +1334,6 @@ function Fihware:Notify(title, body, duration, accentColor)
     bodyLbl.LayoutOrder            = 2
     bodyLbl.Parent                 = inner
 
-    -- Slim accent progress bar at the very bottom
     local progBG = Instance.new("Frame")
     progBG.Size             = UDim2.new(1, 0, 0, 2)
     progBG.AnchorPoint      = Vector2.new(0, 1)
@@ -1356,7 +1381,6 @@ function Fihware:_init()
     if not ok then sg.Parent = LocalPlayer:WaitForChild("PlayerGui") end
     self.MainGui = sg
 
-    -- Full UI root — hidden when GUI is closed
     local root = Instance.new("Frame")
     root.Name                   = "ScaleRoot"
     root.Size                   = UDim2.new(1, 0, 1, 0)
@@ -1376,29 +1400,29 @@ function Fihware:_init()
         end))
 
     -- ── Logo Pill ───────────────────────────────────────────────
-    -- FIX #2: Pill is now the same height as the main header (48px)
-    -- and wide enough to show the logo at identical proportions.
-    -- FIX #3: Removed the left-edge accent stripe from the pill.
-    local PILL_W = self.MainNavWidth   -- 245 — matches main nav width
-    local PILL_H = 48                  -- matches HEADER_H in CreateMainWindow
+    -- Now uses the same Elevated color + gradient as the main header
+    local PILL_W = self.MainNavWidth
+    local PILL_H = 48
 
     local pill = Instance.new("Frame")
     pill.Name             = "LogoPill"
     pill.Size             = UDim2.new(0, PILL_W, 0, PILL_H)
     pill.Position         = UDim2.new(0, 8, 0, 8)
-    pill.BackgroundColor3 = self.Theme.Surface
+    -- Match the header's Elevated background exactly
+    pill.BackgroundColor3 = self.Theme.Elevated
     pill.BorderSizePixel  = 0
     pill.Visible          = true
     pill.Parent           = sg
     corner(pill, 8)
     stroke(pill, self.Theme.Border)
     shadow(pill, 0.78)
+    -- Same gradient direction as the main header
+    applyGradient(pill, self.Theme.HeaderTop, self.Theme.HeaderBot)
 
-    -- Logo image sized identically to the main header logo
     local pillLogo = Instance.new("ImageLabel")
-    pillLogo.Size                   = UDim2.new(1, -60, 0, 30)   -- same as header logo
+    pillLogo.Size                   = UDim2.new(1, -60, 0, 30)
     pillLogo.AnchorPoint            = Vector2.new(0, 0.5)
-    pillLogo.Position               = UDim2.new(0, 12, 0.5, 0)   -- same as header logo
+    pillLogo.Position               = UDim2.new(0, 12, 0.5, 0)
     pillLogo.BackgroundTransparency = 1
     pillLogo.Image                  = LIBRARY_LOGO
     pillLogo.ScaleType              = Enum.ScaleType.Fit
@@ -1413,10 +1437,10 @@ function Fihware:_init()
     pillBtn.Parent                 = pill
 
     pillBtn.MouseEnter:Connect(function()
-        tween(pill, { BackgroundColor3 = self.Theme.Elevated }, 0.12)
+        tween(pill, { BackgroundColor3 = self.Theme.ElevatedHvr }, 0.12)
     end)
     pillBtn.MouseLeave:Connect(function()
-        tween(pill, { BackgroundColor3 = self.Theme.Surface }, 0.12)
+        tween(pill, { BackgroundColor3 = self.Theme.Elevated }, 0.12)
     end)
     pillBtn.MouseButton1Click:Connect(function()
         self:Toggle()
@@ -1442,7 +1466,7 @@ function Fihware:_init()
     nhList.VerticalAlignment = Enum.VerticalAlignment.Bottom
     self.NotifHolder = nh
 
-    -- Auto-save every 30 seconds
+    -- Auto-save
     task.spawn(function()
         while task.wait(30) do
             if self.Initialized then self:SaveSettings() end
@@ -1549,6 +1573,9 @@ function Fihware:CreateMainWindow(config)
     corner(nav, 8)
     stroke(nav, lib.Theme.Border)
     shadow(nav, 0.72)
+    -- Window body gradient — subtle top-to-bottom depth
+    applyGradient(nav, lib.Theme.SurfaceTop, lib.Theme.SurfaceBot)
+
     lib.MainNavRef = nav
 
     -- HEADER
@@ -1560,11 +1587,13 @@ function Fihware:CreateMainWindow(config)
     header.ZIndex           = 2
     header.Parent           = nav
     corner(header, 8)
+    -- Header gradient — slightly lighter at top for a "raised" feel
+    applyGradient(header, lib.Theme.HeaderTop, lib.Theme.HeaderBot)
 
     local headerCover = Instance.new("Frame")
     headerCover.Size             = UDim2.new(1, 0, 0, 10)
     headerCover.Position         = UDim2.new(0, 0, 1, -10)
-    headerCover.BackgroundColor3 = lib.Theme.Elevated
+    headerCover.BackgroundColor3 = lib.Theme.HeaderBot
     headerCover.BorderSizePixel  = 0
     headerCover.Parent           = header
 
@@ -1594,7 +1623,7 @@ function Fihware:CreateMainWindow(config)
     verLabel.Position         = UDim2.new(1, -10, 0.5, 0)
     verLabel.BackgroundColor3 = lib.Theme.Background
     verLabel.BorderSizePixel  = 0
-    verLabel.Text             = "v3.3"
+    verLabel.Text             = "v3.4"
     verLabel.TextSize         = 10
     verLabel.Font             = Enum.Font.GothamBold
     verLabel.TextColor3       = lib.Theme.SubText
@@ -1614,11 +1643,13 @@ function Fihware:CreateMainWindow(config)
     footer.ZIndex           = 2
     footer.Parent           = nav
     corner(footer, 8)
+    -- Footer gradient — mirrors header direction
+    applyGradient(footer, lib.Theme.HeaderBot, lib.Theme.HeaderTop)
 
     local footerCover = Instance.new("Frame")
     footerCover.Size             = UDim2.new(1, 0, 0, 10)
     footerCover.Position         = UDim2.new(0, 0, 0, 0)
-    footerCover.BackgroundColor3 = lib.Theme.Elevated
+    footerCover.BackgroundColor3 = lib.Theme.HeaderBot
     footerCover.BorderSizePixel  = 0
     footerCover.Parent           = footer
 
@@ -1630,6 +1661,7 @@ function Fihware:CreateMainWindow(config)
     footerDivider.ZIndex           = 3
     footerDivider.Parent           = footer
 
+    -- Avatar / pfp
     local pfp = Instance.new("ImageLabel")
     pfp.Size             = UDim2.new(0, 36, 0, 36)
     pfp.AnchorPoint      = Vector2.new(0, 0.5)
@@ -1653,8 +1685,9 @@ function Fihware:CreateMainWindow(config)
     corner(statusDot, 99)
     stroke(statusDot, lib.Theme.Elevated, 2)
 
+    -- Username labels — shifted right to leave room for settings gear on far right
     local nameLbl = Instance.new("TextLabel")
-    nameLbl.Size                   = UDim2.new(1, -58, 0, 17)
+    nameLbl.Size                   = UDim2.new(1, -92, 0, 17)   -- right edge leaves 46px for gear
     nameLbl.Position               = UDim2.new(0, 54, 0.5, -16)
     nameLbl.BackgroundTransparency = 1
     nameLbl.Text                   = LocalPlayer.DisplayName
@@ -1667,7 +1700,7 @@ function Fihware:CreateMainWindow(config)
     nameLbl.Parent                 = footer
 
     local userLbl = Instance.new("TextLabel")
-    userLbl.Size                   = UDim2.new(1, -58, 0, 14)
+    userLbl.Size                   = UDim2.new(1, -92, 0, 14)
     userLbl.Position               = UDim2.new(0, 54, 0.5, 1)
     userLbl.BackgroundTransparency = 1
     userLbl.Text                   = "@" .. LocalPlayer.Name
@@ -1678,6 +1711,60 @@ function Fihware:CreateMainWindow(config)
     userLbl.TextTruncate           = Enum.TextTruncate.AtEnd
     userLbl.ZIndex                 = 3
     userLbl.Parent                 = footer
+
+    -- ── Settings gear button (bottom-right of footer) ───────────
+    -- Uses Icons.Settings (rbxassetid://111755297486537)
+    local gearSize  = 26
+    local gearFrame = Instance.new("Frame")
+    gearFrame.Size             = UDim2.new(0, gearSize, 0, gearSize)
+    gearFrame.AnchorPoint      = Vector2.new(1, 0.5)
+    gearFrame.Position         = UDim2.new(1, -10, 0.5, 0)
+    gearFrame.BackgroundColor3 = lib.Theme.Background
+    gearFrame.BorderSizePixel  = 0
+    gearFrame.ZIndex           = 3
+    gearFrame.Parent           = footer
+    corner(gearFrame, 6)
+    stroke(gearFrame, lib.Theme.Border)
+
+    local gearIcon = Instance.new("ImageLabel")
+    gearIcon.Size                   = UDim2.new(0, 14, 0, 14)
+    gearIcon.AnchorPoint            = Vector2.new(0.5, 0.5)
+    gearIcon.Position               = UDim2.new(0.5, 0, 0.5, 0)
+    gearIcon.BackgroundTransparency = 1
+    gearIcon.Image                  = Icons.Settings
+    gearIcon.ImageColor3            = lib.Theme.SubText
+    gearIcon.ZIndex                 = 4
+    gearIcon.Parent                 = gearFrame
+
+    local gearBtn = Instance.new("TextButton")
+    gearBtn.Size                   = UDim2.new(1, 0, 1, 0)
+    gearBtn.BackgroundTransparency = 1
+    gearBtn.Text                   = ""
+    gearBtn.AutoButtonColor        = false
+    gearBtn.ZIndex                 = 5
+    gearBtn.Parent                 = gearFrame
+
+    gearBtn.MouseEnter:Connect(function()
+        tween(gearFrame, { BackgroundColor3 = lib.Theme.Elevated }, 0.1)
+        tween(gearIcon,  { ImageColor3      = lib.Theme.Accent   }, 0.1)
+    end)
+    gearBtn.MouseLeave:Connect(function()
+        tween(gearFrame, { BackgroundColor3 = lib.Theme.Background }, 0.1)
+        tween(gearIcon,  { ImageColor3      = lib.Theme.SubText    }, 0.1)
+    end)
+    gearBtn.MouseButton1Click:Connect(function()
+        -- Spin animation
+        tween(gearIcon, { Rotation = gearIcon.Rotation + 90 }, 0.22)
+        -- Fire user callback if set, otherwise just open the GUI
+        if lib.OnSettingsClick then
+            pcall(lib.OnSettingsClick)
+        end
+    end)
+
+    -- Keep gear icon accent-tinted when accent changes
+    table.insert(accentObjs, { obj = gearIcon, type = "ImageColor3" })
+    -- Override: only accent on hover, so remove from list if you want strictly SubText.
+    -- Keeping it accent-aware so it updates when rainbow changes etc.
 
     -- Content scroll
     local scroll = Instance.new("ScrollingFrame")
@@ -1916,6 +2003,15 @@ function Fihware:CreateMainWindow(config)
                 lib:Notify("Profile", "Settings loaded", 2.5, lib.Theme.Success)
             end,
         })
+
+        -- Wire the gear button to scroll the content to the top (settings section)
+        -- Users can override lib.OnSettingsClick with any custom behaviour
+        if not lib.OnSettingsClick then
+            lib.OnSettingsClick = function()
+                -- Scroll to top of main nav content (where GUI settings live)
+                tween(scroll, { CanvasPosition = Vector2.new(0, 0) }, 0.25)
+            end
+        end
     end
 
     return Main
@@ -1923,8 +2019,6 @@ end
 
 -- ================================================================
 -- SUB-WINDOW
--- FIX #1: Close animation runs at 0.13 s (was 0.26 s) so tabs
--- disappear promptly when resorting.
 -- ================================================================
 function Fihware:CreateWindow(config)
     config = config or {}
@@ -1950,6 +2044,8 @@ function Fihware:CreateWindow(config)
     corner(win, 8)
     stroke(win, lib.Theme.Border)
     shadow(win, 0.72)
+    -- Sub-window body gradient
+    applyGradient(win, lib.Theme.SurfaceTop, lib.Theme.SurfaceBot)
 
     -- Titlebar
     local tb = Instance.new("Frame")
@@ -1960,11 +2056,12 @@ function Fihware:CreateWindow(config)
     tb.ZIndex           = 2
     tb.Parent           = win
     corner(tb, 8)
+    applyGradient(tb, lib.Theme.HeaderTop, lib.Theme.HeaderBot)
 
     local tbCover = Instance.new("Frame")
     tbCover.Size             = UDim2.new(1, 0, 0, 10)
     tbCover.Position         = UDim2.new(0, 0, 1, -10)
-    tbCover.BackgroundColor3 = lib.Theme.Elevated
+    tbCover.BackgroundColor3 = lib.Theme.HeaderBot
     tbCover.BorderSizePixel  = 0
     tbCover.Parent           = tb
 
@@ -2046,7 +2143,6 @@ function Fihware:CreateWindow(config)
     }
     table.insert(lib.Windows, Win)
 
-    -- ── SetVisible — FIX #1: 0.13 s close tween (was 0.26 s) ───
     function Win:SetVisible(val)
         if Win._wantsVisible == val then return end
         Win._wantsVisible = val
