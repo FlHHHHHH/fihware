@@ -1,11 +1,14 @@
 -- ================================================================
---   🐟 fihware UI Library  v3.1
+--   🐟 fihware UI Library  v3.2
 --   Vape V4 1:1 — modernized, polished, dark-themed
 --
 --   Single-column main window with module nav + inline settings,
---   side-by-side sub-windows, player PFP footer.
+--   side-by-side sub-windows (smooth, auto-sorted).
 --
 --   Starts HIDDEN. Press K (default) to toggle.
+--   Hidden mode shows a minimal logo pill — click it to restore.
+--
+--   Windows are NOT draggable — layout is fully managed.
 --
 --   Logo is locked (asset 136012286201255) — cannot be customized.
 --   Title is locked — no custom title supported.
@@ -26,7 +29,7 @@ local Fihware = {}
 Fihware.__index = Fihware
 
 -- ================================================================
--- LOCKED LOGO (cannot be changed — fixed asset, ScaleType.Fit)
+-- LOCKED LOGO
 -- ================================================================
 local LIBRARY_LOGO = "rbxassetid://136012286201255"
 
@@ -85,7 +88,7 @@ local function tween(obj, props, t, style, dir)
     if not obj or not obj.Parent then return end
     local twn = TweenService:Create(obj, TweenInfo.new(
         t     or 0.15,
-        style or Enum.EasingStyle.Quad,
+        style or Enum.EasingStyle.Quint,
         dir   or Enum.EasingDirection.Out
     ), props)
     twn:Play()
@@ -131,8 +134,8 @@ local function shadow(parent, transparency)
     local img = Instance.new("ImageLabel")
     img.Name                   = "_Shadow"
     img.AnchorPoint            = Vector2.new(0.5, 0.5)
-    img.Position               = UDim2.new(0.5, 0, 0.5, 8)
-    img.Size                   = UDim2.new(1, 44, 1, 44)
+    img.Position               = UDim2.new(0.5, 0, 0.5, 10)
+    img.Size                   = UDim2.new(1, 48, 1, 48)
     img.BackgroundTransparency = 1
     img.Image                  = "rbxassetid://6014261993"
     img.ImageColor3            = Color3.new(0, 0, 0)
@@ -142,42 +145,6 @@ local function shadow(parent, transparency)
     img.ZIndex                 = -1
     img.Parent                 = parent
     return img
-end
-
-local function makeDraggable(frame, handle, onDragStart)
-    handle = handle or frame
-    local dragging, dragStart, startPos
-    local conns = {}
-
-    conns[1] = handle.InputBegan:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1
-        or i.UserInputType == Enum.UserInputType.Touch then
-            dragging  = true
-            dragStart = i.Position
-            startPos  = frame.Position
-            if onDragStart then onDragStart() end
-        end
-    end)
-
-    conns[2] = UserInputService.InputChanged:Connect(function(i)
-        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement
-                       or i.UserInputType == Enum.UserInputType.Touch) then
-            local d = i.Position - dragStart
-            frame.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + d.X,
-                startPos.Y.Scale, startPos.Y.Offset + d.Y
-            )
-        end
-    end)
-
-    conns[3] = UserInputService.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1
-        or i.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
-    end)
-
-    return conns
 end
 
 local function tooltip(lib, hostBtn, parentRow, text)
@@ -206,7 +173,7 @@ local function tooltip(lib, hostBtn, parentRow, text)
 end
 
 -- ================================================================
--- WIDGET BUILDERS  (shared by MainWindow & sub-windows)
+-- WIDGET BUILDERS
 -- ================================================================
 local W = {}
 
@@ -338,12 +305,12 @@ function W.toggle(lib, parent, layoutOrder, accentObjs, cfg)
     local function setEnabled(val, silent)
         enabled     = val
         api.Enabled = val
-        tween(accentBar, { BackgroundTransparency = val and 0 or 1 }, 0.15)
+        tween(accentBar, { BackgroundTransparency = val and 0 or 1 }, 0.18)
         tween(indFill, {
             BackgroundTransparency = val and 0 or 1,
             Size = val and UDim2.new(0, 10, 0, 10) or UDim2.new(0, 0, 0, 0),
-        }, 0.15)
-        tween(nameLbl, { TextColor3 = val and lib.Theme.TextBright or lib.Theme.Text }, 0.15)
+        }, 0.18)
+        tween(nameLbl, { TextColor3 = val and lib.Theme.TextBright or lib.Theme.Text }, 0.18)
         indStroke.Color = val and lib.Theme.Accent or lib.Theme.BorderLight
 
         if not silent then
@@ -392,7 +359,6 @@ function W.slider(lib, parent, layoutOrder, accentObjs, cfg)
     local eName    = cfg.Name     or "Slider"
     local decimals = cfg.Decimals or 0
 
-    -- Clamp default to valid range
     value = math.clamp(value, min, max)
 
     local row = Instance.new("Frame")
@@ -547,7 +513,6 @@ function W.dropdown(lib, parent, layoutOrder, accentObjs, cfg)
     local selected = cfg.Default or (list[1] or "")
     local open     = false
 
-    -- Validate default is in list
     local defaultValid = false
     for _, v in ipairs(list) do
         if v == selected then defaultValid = true; break end
@@ -646,31 +611,24 @@ function W.dropdown(lib, parent, layoutOrder, accentObjs, cfg)
     local function closeDropdown()
         if not open then return end
         open = false
-        tween(dropFrame, { Size = UDim2.new(1, 0, 0, 0) }, 0.13)
-        tween(arrow, { Rotation = 0 }, 0.13)
-        task.delay(0.14, function()
+        tween(dropFrame, { Size = UDim2.new(1, 0, 0, 0) }, 0.15)
+        tween(arrow, { Rotation = 0 }, 0.15)
+        task.delay(0.16, function()
             dropFrame.Visible = false
             container.Size    = UDim2.new(1, 0, 0, 34)
         end)
-    end
-
-    local function calcDropHeight()
-        -- Calculate height from item count so we don't depend on AbsoluteContentSize
-        -- before layout pass. Each item: 28px height, 2px gap, 8px total padding
-        local itemH = 28
-        local gap   = 2
-        local total = #list * itemH + math.max(0, #list - 1) * gap + 8
-        return math.clamp(total, 34, 180)
     end
 
     local function populate()
         for _, c in pairs(dScroll:GetChildren()) do
             if c:IsA("Frame") then c:Destroy() end
         end
+        local itemH = 28
+        local gap   = 2
         for idx, item in ipairs(list) do
             local opt = Instance.new("Frame")
-            opt.Size                   = UDim2.new(1, 0, 0, 28)
-            opt.BackgroundColor3       = item == selected and lib.Theme.ElevatedHvr or Color3.fromRGB(0, 0, 0)
+            opt.Size                   = UDim2.new(1, 0, 0, itemH)
+            opt.BackgroundColor3       = item == selected and lib.Theme.ElevatedHvr or Color3.fromRGB(0,0,0)
             opt.BackgroundTransparency = item == selected and 0 or 1
             opt.BorderSizePixel        = 0
             opt.LayoutOrder            = idx
@@ -708,8 +666,8 @@ function W.dropdown(lib, parent, layoutOrder, accentObjs, cfg)
                 closeDropdown()
             end)
         end
-        -- Update canvas size for scroll
-        local h = calcDropHeight()
+        local total = #list * itemH + math.max(0, #list - 1) * gap + 8
+        local h = math.clamp(total, 34, 180)
         dScroll.CanvasSize = UDim2.new(0, 0, 0, #list * 30 + 6)
         return h
     end
@@ -726,9 +684,9 @@ function W.dropdown(lib, parent, layoutOrder, accentObjs, cfg)
             local h = populate()
             dropFrame.Visible = true
             dropFrame.Size    = UDim2.new(1, 0, 0, 0)
-            tween(dropFrame, { Size = UDim2.new(1, 0, 0, h) }, 0.15)
+            tween(dropFrame, { Size = UDim2.new(1, 0, 0, h) }, 0.17)
             container.Size = UDim2.new(1, 0, 0, 34 + h + 4)
-            tween(arrow, { Rotation = 180 }, 0.15)
+            tween(arrow, { Rotation = 180 }, 0.17)
         else
             closeDropdown()
         end
@@ -737,7 +695,6 @@ function W.dropdown(lib, parent, layoutOrder, accentObjs, cfg)
     lib.SavedObjects[eName] = {
         SaveValue = selected,
         Load = function(v)
-            -- Validate the saved value is still in list
             local valid = false
             for _, item in ipairs(list) do
                 if item == v then valid = true; break end
@@ -751,7 +708,6 @@ function W.dropdown(lib, parent, layoutOrder, accentObjs, cfg)
     }
     api.SetList = function(newList)
         list = newList; api.List = newList
-        -- If current selection no longer valid, reset to first item
         local stillValid = false
         for _, v in ipairs(newList) do
             if v == selected then stillValid = true; break end
@@ -806,7 +762,6 @@ function W.button(lib, parent, layoutOrder, accentObjs, cfg)
     return api
 end
 
--- Outline button (RESET / UNINJECT / etc)
 function W.outlineButton(lib, parent, layoutOrder, accentObjs, cfg)
     cfg = cfg or {}
     local eName = cfg.Name or "Button"
@@ -916,14 +871,9 @@ end
 function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
     cfg = cfg or {}
     local eName = cfg.Name     or "Color"
-    local h     = cfg.DefaultH or lib.AccentH
-    local s     = cfg.DefaultS or lib.AccentS
-    local v     = cfg.DefaultV or lib.AccentV
-
-    -- Clamp all values to valid ranges
-    h = math.clamp(h, 0, 1)
-    s = math.clamp(s, 0, 1)
-    v = math.clamp(v, 0, 1)
+    local h     = math.clamp(cfg.DefaultH or lib.AccentH, 0, 1)
+    local s     = math.clamp(cfg.DefaultS or lib.AccentS, 0, 1)
+    local v     = math.clamp(cfg.DefaultV or lib.AccentV, 0, 1)
 
     local row = Instance.new("Frame")
     row.Size                   = UDim2.new(1, 0, 0, 96)
@@ -1126,7 +1076,6 @@ function W.keybind(lib, parent, layoutOrder, accentObjs, cfg)
         keyBtn.TextColor3 = lib.Theme.Accent
     end)
 
-    -- Right-click cancels capture
     keyBtn.MouseButton2Click:Connect(function()
         if capturing then
             capturing         = false
@@ -1163,7 +1112,6 @@ end
 function Fihware.new()
     local self = setmetatable({}, Fihware)
 
-    -- DARK VAPE-INSPIRED THEME ──────────────────────────────────
     self.Theme = {
         Accent       = Color3.fromRGB(80, 155, 255),
         AccentDark   = Color3.fromRGB(50, 110, 200),
@@ -1184,16 +1132,16 @@ function Fihware.new()
     }
 
     self.SavedObjects   = {}
-    self.Windows        = {}   -- ordered list of sub-windows
-    self.WindowGap      = 8
+    self.Windows        = {}
+    self.WindowGap      = 10
     self.WindowWidth    = 240
     self.MainNavWidth   = 245
     self.Connections    = {}
-    self.DragConns      = {}   -- drag-specific connections for cleanup
     self.MainGui        = nil
     self.MainBlur       = nil
     self.MainScale      = nil
     self.ScaleRoot      = nil
+    self.LogoPill       = nil   -- the minimal logo shown when hidden
     self.NotifHolder    = nil
     self.MainNavRef     = nil
     self.Initialized    = false
@@ -1209,8 +1157,8 @@ function Fihware.new()
     self.NotificationsEnabled = true
     self.ToggleAlertsEnabled  = true
     self.TooltipsEnabled      = true
-    self.CurrentKeybind       = Enum.KeyCode.K  -- Press K to toggle
-    self.GuiVisible           = false           -- Start hidden
+    self.CurrentKeybind       = Enum.KeyCode.K
+    self.GuiVisible           = false   -- starts hidden
 
     self.Icons = {}
     for k, v in pairs(Icons) do self.Icons[k] = v end
@@ -1268,6 +1216,11 @@ function Fihware:SetAccent(h, s, v)
 
     for _, win in pairs(self.Windows) do applyAccentList(win._accentObjects) end
     applyAccentList(self._mainAccent)
+
+    -- Update logo pill accent bar if it exists
+    if self.LogoPill and self.LogoPill._accentBar then
+        self.LogoPill._accentBar.BackgroundColor3 = self.Theme.Accent
+    end
 end
 
 -- ================================================================
@@ -1317,7 +1270,7 @@ function Fihware:Notify(title, body, duration, accentColor)
     stroke(notif, self.Theme.Border)
     shadow(notif, 0.6)
 
-    tween(notif, { BackgroundTransparency = 0 }, 0.2)
+    tween(notif, { BackgroundTransparency = 0 }, 0.22)
 
     local bar = Instance.new("Frame")
     bar.Size             = UDim2.new(0, 3, 1, -16)
@@ -1404,11 +1357,12 @@ function Fihware:_init()
     if not ok then sg.Parent = LocalPlayer:WaitForChild("PlayerGui") end
     self.MainGui = sg
 
+    -- Full UI root — hidden when GUI is closed
     local root = Instance.new("Frame")
     root.Name                   = "ScaleRoot"
     root.Size                   = UDim2.new(1, 0, 1, 0)
     root.BackgroundTransparency = 1
-    root.Visible                = false   -- starts hidden, press K to show
+    root.Visible                = false
     root.Parent                 = sg
     self.ScaleRoot = root
 
@@ -1422,11 +1376,67 @@ function Fihware:_init()
             uiScale.Scale = math.clamp(Camera.ViewportSize.X / 1920, 0.55, 1)
         end))
 
+    -- ── Logo Pill — visible only when the GUI is hidden ─────────
+    -- Sits directly in the ScreenGui (outside ScaleRoot) so it
+    -- persists as a minimal indicator even when everything else hides.
+    local pill = Instance.new("Frame")
+    pill.Name             = "LogoPill"
+    pill.Size             = UDim2.new(0, 136, 0, 34)
+    pill.Position         = UDim2.new(0, 8, 0, 8)
+    pill.BackgroundColor3 = self.Theme.Surface
+    pill.BorderSizePixel  = 0
+    pill.Visible          = true   -- shown when GUI starts hidden
+    pill.Parent           = sg
+    corner(pill, 8)
+    stroke(pill, self.Theme.Border)
+    shadow(pill, 0.6)
+
+    -- Thin accent stripe on the left edge of the pill
+    local pillAccent = Instance.new("Frame")
+    pillAccent.Size             = UDim2.new(0, 2, 0, 16)
+    pillAccent.AnchorPoint      = Vector2.new(0, 0.5)
+    pillAccent.Position         = UDim2.new(0, 0, 0.5, 0)
+    pillAccent.BackgroundColor3 = self.Theme.Accent
+    pillAccent.BorderSizePixel  = 0
+    pillAccent.Parent           = pill
+    corner(pillAccent, 1)
+
+    local pillLogo = Instance.new("ImageLabel")
+    pillLogo.Size                   = UDim2.new(1, -20, 0, 20)
+    pillLogo.AnchorPoint            = Vector2.new(0.5, 0.5)
+    pillLogo.Position               = UDim2.new(0.5, 6, 0.5, 0)
+    pillLogo.BackgroundTransparency = 1
+    pillLogo.Image                  = LIBRARY_LOGO
+    pillLogo.ScaleType              = Enum.ScaleType.Fit
+    pillLogo.ImageColor3            = Color3.new(1, 1, 1)
+    pillLogo.Parent                 = pill
+
+    local pillBtn = Instance.new("TextButton")
+    pillBtn.Size                   = UDim2.new(1, 0, 1, 0)
+    pillBtn.BackgroundTransparency = 1
+    pillBtn.Text                   = ""
+    pillBtn.AutoButtonColor        = false
+    pillBtn.Parent                 = pill
+
+    pillBtn.MouseEnter:Connect(function()
+        tween(pill, { BackgroundColor3 = self.Theme.Elevated }, 0.12)
+    end)
+    pillBtn.MouseLeave:Connect(function()
+        tween(pill, { BackgroundColor3 = self.Theme.Surface }, 0.12)
+    end)
+    pillBtn.MouseButton1Click:Connect(function()
+        self:Toggle()
+    end)
+
+    self.LogoPill = { Frame = pill, _accentBar = pillAccent }
+
+    -- Blur
     local blur = Instance.new("BlurEffect")
     blur.Size   = 0
     blur.Parent = Lighting
     self.MainBlur = blur
 
+    -- Notification holder
     local nh = Instance.new("Frame")
     nh.Name                   = "NotifHolder"
     nh.Size                   = UDim2.new(0, 290, 0, 520)
@@ -1445,7 +1455,7 @@ function Fihware:_init()
         end
     end)
 
-    -- Rainbow loop — only runs one frame when disabled, cheap
+    -- Rainbow loop
     task.spawn(function()
         while task.wait(0.03) do
             if self.RainbowEnabled and self.Initialized then
@@ -1472,10 +1482,20 @@ function Fihware:Destroy()
     self.Initialized  = false
 end
 
+-- SetVisible: toggles the full UI vs the minimal logo pill.
+-- The pill stays in a fixed screen position at all times.
 function Fihware:SetVisible(val)
     self.GuiVisible = val
-    if self.ScaleRoot then self.ScaleRoot.Visible = val end
-    if self.MainBlur  then tween(self.MainBlur, { Size = val and 8 or 0 }, 0.25) end
+
+    if self.ScaleRoot then
+        self.ScaleRoot.Visible = val
+    end
+    if self.LogoPill then
+        self.LogoPill.Frame.Visible = not val
+    end
+    if self.MainBlur then
+        tween(self.MainBlur, { Size = val and 8 or 0 }, 0.25)
+    end
 end
 
 function Fihware:Toggle()
@@ -1483,23 +1503,34 @@ function Fihware:Toggle()
 end
 
 -- ================================================================
--- SMART WINDOW POSITIONING
+-- WINDOW LAYOUT — smooth, left-to-right, no gaps
 --
--- Windows are stacked left-to-right starting from the main nav's
--- right edge. When a window opens or closes, all others slide to
--- fill gaps or make room. Only windows with _wantsVisible = true
--- are included in the sorted layout.
+-- Every window whose _wantsVisible is true slides into its
+-- computed slot with a single consistent tween.  No janky
+-- off-screen starts; windows come from their previous position.
 -- ================================================================
 function Fihware:SortWindows()
     if not self.MainNavRef then return end
+
     local navPos  = self.MainNavRef.Position
     local navSize = self.MainNavRef.Size
     local nx      = navPos.X.Offset + navSize.X.Offset + self.WindowGap
     local ny      = navPos.Y.Offset
 
+    local tweenInfo = TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+
     for _, w in ipairs(self.Windows) do
         if w._wantsVisible then
-            tween(w.Frame, { Position = UDim2.new(0, nx, 0, ny) }, 0.22, Enum.EasingStyle.Quart)
+            local targetPos = UDim2.new(0, nx, 0, ny)
+            if w.Frame.Visible then
+                -- Already on screen — smooth slide to new slot
+                TweenService:Create(w.Frame, tweenInfo, { Position = targetPos }):Play()
+            else
+                -- First appearance: place it at the target and let it pop in
+                w.Frame.Position = UDim2.new(0, nx + 20, 0, ny)
+                w.Frame.Visible  = true
+                TweenService:Create(w.Frame, tweenInfo, { Position = targetPos }):Play()
+            end
             nx = nx + w.Frame.Size.X.Offset + self.WindowGap
         end
     end
@@ -1513,7 +1544,6 @@ function Fihware:CreateMainWindow(config)
     self:_init()
 
     local lib        = self
-    -- config.Title is intentionally ignored — logo IS the branding
     local position   = config.Position  or UDim2.new(0, 8, 0, 8)
     local maxH       = config.MaxHeight or 580
     local elemCount  = 0
@@ -1547,7 +1577,6 @@ function Fihware:CreateMainWindow(config)
     header.Parent           = nav
     corner(header, 8)
 
-    -- Square corner cover at bottom of header (merges with body)
     local headerCover = Instance.new("Frame")
     headerCover.Size             = UDim2.new(1, 0, 0, 10)
     headerCover.Position         = UDim2.new(0, 0, 1, -10)
@@ -1563,28 +1592,27 @@ function Fihware:CreateMainWindow(config)
     headerDivider.ZIndex           = 3
     headerDivider.Parent           = header
 
-    -- LOCKED LOGO — wide, Fit scale type, no squishing
-    -- The logo is the wordmark "FIHWARE" + fish icon (horizontal banner)
+    -- Locked logo
     local logoImg = Instance.new("ImageLabel")
     logoImg.Name                   = "Logo"
-    logoImg.Size                   = UDim2.new(1, -60, 0, 30)  -- fills header minus version pill gap
+    logoImg.Size                   = UDim2.new(1, -60, 0, 30)
     logoImg.AnchorPoint            = Vector2.new(0, 0.5)
     logoImg.Position               = UDim2.new(0, 12, 0.5, 0)
     logoImg.BackgroundTransparency = 1
     logoImg.Image                  = LIBRARY_LOGO
-    logoImg.ScaleType              = Enum.ScaleType.Fit          -- preserves aspect ratio, no squish
+    logoImg.ScaleType              = Enum.ScaleType.Fit
     logoImg.ImageColor3            = Color3.new(1, 1, 1)
     logoImg.ZIndex                 = 3
     logoImg.Parent                 = header
 
-    -- Version pill (top-right of header)
+    -- Version pill
     local verLabel = Instance.new("TextLabel")
     verLabel.Size             = UDim2.new(0, 32, 0, 17)
     verLabel.AnchorPoint      = Vector2.new(1, 0.5)
     verLabel.Position         = UDim2.new(1, -10, 0.5, 0)
     verLabel.BackgroundColor3 = lib.Theme.Background
     verLabel.BorderSizePixel  = 0
-    verLabel.Text             = "v3.1"
+    verLabel.Text             = "v3.2"
     verLabel.TextSize         = 10
     verLabel.Font             = Enum.Font.GothamBold
     verLabel.TextColor3       = lib.Theme.SubText
@@ -1593,9 +1621,9 @@ function Fihware:CreateMainWindow(config)
     corner(verLabel, 4)
     stroke(verLabel, lib.Theme.Border)
 
-    makeDraggable(nav, header)
+    -- NO makeDraggable — layout is fully managed
 
-    -- FOOTER (player PFP)
+    -- FOOTER (player info)
     local footer = Instance.new("Frame")
     footer.Name             = "Footer"
     footer.Size             = UDim2.new(1, 0, 0, FOOTER_H)
@@ -1691,7 +1719,7 @@ function Fihware:CreateMainWindow(config)
     local function refreshSize()
         local ch     = contentList.AbsoluteContentSize.Y + 24
         local totalH = math.min(ch + HEADER_H + FOOTER_H, maxH)
-        tween(nav, { Size = UDim2.new(0, lib.MainNavWidth, 0, totalH) }, 0.18)
+        tween(nav, { Size = UDim2.new(0, lib.MainNavWidth, 0, totalH) }, 0.2)
         scroll.CanvasSize = UDim2.new(0, 0, 0, ch)
     end
     contentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(refreshSize)
@@ -1708,7 +1736,7 @@ function Fihware:CreateMainWindow(config)
 
     function Main:GetFrame() return nav end
 
-    -- AddWindowButton: adds a nav item that toggles a sub-window
+    -- AddWindowButton: nav item that toggles a sub-window
     function Main:AddWindowButton(name, window, icon)
         elemCount = elemCount + 1
         local active = false
@@ -1771,17 +1799,16 @@ function Fihware:CreateMainWindow(config)
 
         local function setActive(v)
             active = v
-            -- Toggle visibility on the sub-window; SortWindows is called inside SetVisible
             if window then window:SetVisible(v) end
-            tween(nameLbl2,  { TextColor3 = v and lib.Theme.TextBright or lib.Theme.SubText }, 0.15)
-            tween(stateDot,  { BackgroundTransparency = v and 0 or 1 }, 0.15)
-            tween(accentBar, { BackgroundTransparency = v and 0 or 1 }, 0.15)
+            tween(nameLbl2,  { TextColor3 = v and lib.Theme.TextBright or lib.Theme.SubText }, 0.18)
+            tween(stateDot,  { BackgroundTransparency = v and 0 or 1 }, 0.18)
+            tween(accentBar, { BackgroundTransparency = v and 0 or 1 }, 0.18)
             tween(btn, {
                 BackgroundTransparency = v and 0 or 1,
                 BackgroundColor3       = lib.Theme.Elevated,
-            }, 0.15)
+            }, 0.18)
             if iconImg then
-                tween(iconImg, { ImageColor3 = v and lib.Theme.Accent or lib.Theme.SubText }, 0.15)
+                tween(iconImg, { ImageColor3 = v and lib.Theme.Accent or lib.Theme.SubText }, 0.18)
             end
         end
 
@@ -1812,7 +1839,7 @@ function Fihware:CreateMainWindow(config)
         elemCount = elemCount + 1
         return W.section(lib, scroll, elemCount, name)
     end
-    Main.CreateSection = Main.AddSection  -- alias
+    Main.CreateSection = Main.AddSection
 
     function Main:CreateLabel(cfg)
         elemCount = elemCount + 1; return W.label(lib, scroll, elemCount, cfg)
@@ -1897,16 +1924,6 @@ function Fihware:CreateMainWindow(config)
             Name     = "SORT WINDOWS",
             Function = function() lib:SortWindows() end,
         })
-        Main:CreateOutlineButton({
-            Name     = "RESET POSITIONS",
-            Function = function()
-                -- Instantly reset main nav, then re-sort everything from the new position
-                if lib.MainNavRef then
-                    lib.MainNavRef.Position = UDim2.new(0, 8, 0, 8)
-                end
-                lib:SortWindows()
-            end,
-        })
 
         Main:AddSection("PROFILE")
         Main:CreateOutlineButton({
@@ -1930,9 +1947,8 @@ end
 
 -- ================================================================
 -- SUB-WINDOW
--- Windows slide in from the left and stack side-by-side.
--- Opening or closing a window triggers SortWindows so all visible
--- windows slide to fill gaps or make room automatically.
+-- Windows are not draggable — their positions are fully managed
+-- by SortWindows.  Opening/closing is smooth with Quint easing.
 -- ================================================================
 function Fihware:CreateWindow(config)
     config = config or {}
@@ -1949,7 +1965,7 @@ function Fihware:CreateWindow(config)
     local win = Instance.new("Frame")
     win.Name             = name .. "Window"
     win.Size             = UDim2.new(0, lib.WindowWidth, 0, TB_H)
-    win.Position         = UDim2.new(0, -lib.WindowWidth - 20, 0, 8)  -- start off-screen
+    win.Position         = UDim2.new(0, -lib.WindowWidth - 40, 0, 8)
     win.BackgroundColor3 = lib.Theme.Surface
     win.BorderSizePixel  = 0
     win.ClipsDescendants = false
@@ -1983,6 +1999,17 @@ function Fihware:CreateWindow(config)
     tbDivider.BorderSizePixel  = 0
     tbDivider.ZIndex           = 3
     tbDivider.Parent           = tb
+
+    -- Thin accent line on the left of the titlebar
+    local tbAccent = Instance.new("Frame")
+    tbAccent.Size             = UDim2.new(0, 2, 0, 20)
+    tbAccent.AnchorPoint      = Vector2.new(0, 0.5)
+    tbAccent.Position         = UDim2.new(0, 0, 0.5, 0)
+    tbAccent.BackgroundColor3 = lib.Theme.Accent
+    tbAccent.BorderSizePixel  = 0
+    tbAccent.Parent           = tb
+    corner(tbAccent, 1)
+    table.insert(accentObjs, { obj = tbAccent, type = "BackgroundColor3" })
 
     local iconOffset = 14
     if config.Icon then
@@ -2032,50 +2059,45 @@ function Fihware:CreateWindow(config)
         local ch = contentList.AbsoluteContentSize.Y + 24
         scroll.CanvasSize = UDim2.new(0, 0, 0, ch)
         local targetH = math.min(ch + TB_H, maxH)
-        tween(win, { Size = UDim2.new(0, lib.WindowWidth, 0, targetH) }, 0.18)
+        tween(win, { Size = UDim2.new(0, lib.WindowWidth, 0, targetH) }, 0.2)
     end
     contentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(refreshSize)
+
+    -- NO makeDraggable — positions are managed by SortWindows
 
     local Win = {
         Frame          = win,
         _accentObjects = accentObjs,
-        _wantsVisible  = false,  -- tracks intended state (not animation state)
+        _wantsVisible  = false,
     }
     table.insert(lib.Windows, Win)
 
-    -- Dragging a sub-window doesn't block SortWindows,
-    -- but the user can freely position it between sorts
-    makeDraggable(win, tb)
-
-    -- ── SetVisible: the smart open/close with auto-sort ─────────
+    -- ── SetVisible: intent-based open/close with auto-sort ──────
+    -- Opening  → mark want=true, SortWindows slides into correct slot
+    -- Closing  → mark want=false, SortWindows fills gap, window hides
     function Win:SetVisible(val)
-        local wasWanting = Win._wantsVisible
+        if Win._wantsVisible == val then return end
         Win._wantsVisible = val
 
         if val then
-            -- Show the window if it's not already visible
-            if not win.Visible then
-                -- Start just off the left edge of where it'll land
-                local ny = lib.MainNavRef and lib.MainNavRef.Position.Y.Offset or 8
-                win.Position = UDim2.new(0, -lib.WindowWidth - 20, 0, ny)
-                win.Visible  = true
-            end
-            -- Sort all open windows into position (this one slides in from its start pos)
+            -- Reveal and sort into position
             lib:SortWindows()
-
         else
-            -- Slide this window out to the left, hide it
-            local cp = win.Position
-            tween(win,
-                { Position = UDim2.new(0, cp.X.Offset - 20, 0, cp.Y.Offset) },
-                0.18, Enum.EasingStyle.Quart)
+            -- Slide slightly right and fade out, then hide
+            local curPos = win.Position
+            local tweenInfo = TweenInfo.new(0.26, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+            TweenService:Create(win, tweenInfo, {
+                Position = UDim2.new(0, curPos.X.Offset + 16, 0, curPos.Y.Offset),
+            }):Play()
 
-            -- Immediately re-sort remaining windows to fill the gap
+            -- Re-sort the remaining open windows to close the gap
             lib:SortWindows()
 
-            task.delay(0.19, function()
+            task.delay(0.27, function()
                 if not Win._wantsVisible then
                     win.Visible = false
+                    -- Reset to off-screen for next open
+                    win.Position = UDim2.new(0, -lib.WindowWidth - 40, 0, 8)
                 end
             end)
         end
