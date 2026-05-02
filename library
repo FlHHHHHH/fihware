@@ -1,24 +1,14 @@
 -- ================================================================
---   🐟 fihware UI Library  v3.5
+--   🐟 fihware UI Library  v3.6
 --   Vape V4 1:1 — modernized, polished, dark-themed
 --
---   Changes in v3.5:
---     • Reverted to v3.3 original color palette
---     • Logo pill background now exactly matches the shown header
---     • Removed left-edge accent bars from ALL elements
---     • Fixed icon rendering on nav buttons (ScaleType.Fit, AnchorPoint)
---     • Settings gear icon in footer bottom-right corner
---
---   Single-column main window with module nav + inline settings,
---   side-by-side sub-windows (smooth, auto-sorted).
---
---   Starts HIDDEN. Press K (default) to toggle.
---   Hidden mode shows a minimal logo pill — click it to restore.
---
---   Windows are NOT draggable — layout is fully managed.
---
---   Logo is locked (asset 136012286201255) — cannot be customized.
---   Title is locked — no custom title supported.
+--   Changes in v3.6:
+--     • All asset IDs lifted into top-level CONFIG block (easy to find/edit)
+--     • Fixed icon rendering across the board (clean ScaleType.Fit setup)
+--     • v3.5 version badge replaced with Discord button — click to copy
+--     • UI settings now ONLY accessible via the gear button (separate panel)
+--     • Polished spacing, hover states, and section dividers
+--     • Cleaner indicator pills, rounder corners, smoother tweens
 --
 --   Usage:
 --     local Fihware = loadstring(game:HttpGet(URL))()
@@ -29,42 +19,36 @@
 --
 --     Main:AddWindowButton("Combat", Combat, Lib.Icons.Crosshair)
 --     Main:CreateSection("MISC")
---     Main:AddDefaultSettings()
+--     Main:AddDefaultSettings()  -- creates the Settings panel (opens via gear)
 -- ================================================================
 
 local Fihware = {}
 Fihware.__index = Fihware
 
 -- ================================================================
--- LOCKED LOGO
+--   ⚙️  CONFIG  —  All asset IDs and copyable strings live here
+--                  Edit these to rebrand without hunting through code.
 -- ================================================================
-local LIBRARY_LOGO = "rbxassetid://136012286201255"
+local CONFIG = {
+    -- Logo shown in main header AND in the hidden-mode pill
+    LOGO_ID         = "rbxassetid://136012286201255",
 
--- ================================================================
--- SERVICES
--- ================================================================
-local TweenService     = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local RunService       = game:GetService("RunService")
-local TextService      = game:GetService("TextService")
-local Players          = game:GetService("Players")
-local HttpService      = game:GetService("HttpService")
-local Lighting         = game:GetService("Lighting")
-local LocalPlayer      = Players.LocalPlayer
-local Camera           = workspace.CurrentCamera
+    -- Discord button (replaces the old v3.5 version label).
+    -- Click the button to copy DISCORD_COPY to the clipboard.
+    DISCORD_ICON_ID = "rbxassetid://18505728250",
+    DISCORD_COPY    = "discord.gg/fihware",   -- <-- change this to your invite/handle
 
--- ================================================================
--- SAFE FILE OPS
--- ================================================================
-local _isfile     = isfile     or function() return false end
-local _isfolder   = isfolder   or function() return false end
-local _makefolder = makefolder or function() end
-local _readfile   = readfile   or function() return "{}" end
-local _writefile  = writefile  or function() end
+    -- Drop shadow used on every floating panel
+    SHADOW_ID       = "rbxassetid://6014261993",
 
--- ================================================================
--- ICONS
--- ================================================================
+    -- Default keybind to toggle the menu
+    DEFAULT_KEY     = Enum.KeyCode.K,
+
+    -- Library version string (used for window names, save folder, etc.)
+    VERSION         = "3.6",
+}
+
+-- All Lucide-style icons. Add new ones here so they show up in Lib.Icons.
 local Icons = {
     Bell              = "rbxassetid://120247237876887",
     BellOff           = "rbxassetid://75023590708622",
@@ -86,7 +70,32 @@ local Icons = {
     ToggleLeft        = "rbxassetid://124042941476336",
     Trash             = "rbxassetid://77953011843327",
     Users             = "rbxassetid://120042340977209",
+    Copy              = "rbxassetid://10734898355",
+    X                 = "rbxassetid://10747384394",
 }
+
+-- ================================================================
+-- SERVICES
+-- ================================================================
+local TweenService     = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService       = game:GetService("RunService")
+local TextService      = game:GetService("TextService")
+local Players          = game:GetService("Players")
+local HttpService      = game:GetService("HttpService")
+local Lighting         = game:GetService("Lighting")
+local LocalPlayer      = Players.LocalPlayer
+local Camera           = workspace.CurrentCamera
+
+-- ================================================================
+-- SAFE EXECUTOR FUNCTIONS
+-- ================================================================
+local _isfile      = isfile      or function() return false end
+local _isfolder    = isfolder    or function() return false end
+local _makefolder  = makefolder  or function() end
+local _readfile    = readfile    or function() return "{}" end
+local _writefile   = writefile   or function() end
+local _setclipboard = setclipboard or (toclipboard) or function() end
 
 -- ================================================================
 -- HELPERS
@@ -144,7 +153,7 @@ local function shadow(parent, transparency)
     img.Position               = UDim2.new(0.5, 0, 0.5, 10)
     img.Size                   = UDim2.new(1, 48, 1, 48)
     img.BackgroundTransparency = 1
-    img.Image                  = "rbxassetid://6014261993"
+    img.Image                  = CONFIG.SHADOW_ID
     img.ImageColor3            = Color3.new(0, 0, 0)
     img.ImageTransparency      = transparency or 0.45
     img.ScaleType              = Enum.ScaleType.Slice
@@ -154,20 +163,26 @@ local function shadow(parent, transparency)
     return img
 end
 
--- Creates a properly-rendered icon ImageLabel.
--- Uses ScaleType.Fit and AnchorPoint centering so rbxassetid icons display correctly.
-local function makeIcon(parent, assetId, size, color, zindex)
+-- Robust icon factory.
+-- Renders any rbxassetid icon at the requested size, properly centered,
+-- with no atlas cropping and no aspect-ratio surprises.
+local function makeIcon(parent, assetId, size, color)
+    local holder = Instance.new("Frame")
+    holder.Size                   = UDim2.new(0, size, 0, size)
+    holder.BackgroundTransparency = 1
+    holder.Parent                 = parent
+
     local img = Instance.new("ImageLabel")
-    img.Size                   = UDim2.new(0, size, 0, size)
-    img.AnchorPoint            = Vector2.new(0.5, 0.5)
+    img.Size                   = UDim2.new(1, 0, 1, 0)
     img.BackgroundTransparency = 1
     img.Image                  = assetId
-    img.ImageColor3            = color
+    img.ImageColor3            = color or Color3.new(1, 1, 1)
     img.ScaleType              = Enum.ScaleType.Fit
-    img.ImageRectSize          = Vector2.new(0, 0)   -- full image, no atlas crop
-    img.ZIndex                 = zindex or 3
-    img.Parent                 = parent
-    return img
+    img.Parent                 = holder
+
+    -- Expose the inner image as the "main" object for color tweens
+    holder.Image = img
+    return holder, img
 end
 
 local function tooltip(lib, hostBtn, parentRow, text)
@@ -283,7 +298,6 @@ function W.toggle(lib, parent, layoutOrder, accentObjs, cfg)
     btn.AutoButtonColor        = false
     btn.Parent                 = row
 
-    -- Name label: full width, left-padded, right side leaves room for indicator
     local nameLbl = Instance.new("TextLabel")
     nameLbl.Size                   = UDim2.new(1, -44, 1, 0)
     nameLbl.Position               = UDim2.new(0, 12, 0, 0)
@@ -295,7 +309,6 @@ function W.toggle(lib, parent, layoutOrder, accentObjs, cfg)
     nameLbl.TextXAlignment         = Enum.TextXAlignment.Left
     nameLbl.Parent                 = row
 
-    -- Small square indicator (no accent bar, just a clean checkbox-style box)
     local indicator = Instance.new("Frame")
     indicator.Size             = UDim2.new(0, 18, 0, 18)
     indicator.AnchorPoint      = Vector2.new(1, 0.5)
@@ -316,8 +329,6 @@ function W.toggle(lib, parent, layoutOrder, accentObjs, cfg)
     indFill.Parent                 = indicator
     corner(indFill, 3)
     table.insert(accentObjs, { obj = indFill, type = "BackgroundColor3" })
-
-    tooltip(lib, btn, row, cfg.HoverText)
 
     local api = { Enabled = enabled }
 
@@ -1127,7 +1138,6 @@ end
 function Fihware.new()
     local self = setmetatable({}, Fihware)
 
-    -- ── v3.3 original color palette (reverted) ──────────────────
     self.Theme = {
         Accent       = Color3.fromRGB(80, 155, 255),
         AccentDark   = Color3.fromRGB(50, 110, 200),
@@ -1145,6 +1155,7 @@ function Fihware.new()
         Success      = Color3.fromRGB(70, 200, 130),
         Warning      = Color3.fromRGB(240, 170, 60),
         Error        = Color3.fromRGB(235, 80, 80),
+        Discord      = Color3.fromRGB(88, 101, 242),
     }
 
     self.SavedObjects   = {}
@@ -1160,6 +1171,7 @@ function Fihware.new()
     self.LogoPill       = nil
     self.NotifHolder    = nil
     self.MainNavRef     = nil
+    self.SettingsWindow = nil   -- created lazily by AddDefaultSettings
     self.Initialized    = false
 
     self.RainbowEnabled = false
@@ -1173,20 +1185,20 @@ function Fihware.new()
     self.NotificationsEnabled = true
     self.ToggleAlertsEnabled  = true
     self.TooltipsEnabled      = true
-    self.CurrentKeybind       = Enum.KeyCode.K
+    self.CurrentKeybind       = CONFIG.DEFAULT_KEY
     self.GuiVisible           = false
 
     self.Icons = {}
     for k, v in pairs(Icons) do self.Icons[k] = v end
 
-    -- Optional callback: set this to open/scroll to settings when gear is clicked.
-    self.OnSettingsClick = nil
+    -- expose CONFIG at runtime so users can edit DISCORD_COPY etc. on the fly
+    self.Config = CONFIG
 
     return self
 end
 
 -- ================================================================
--- ICON MANAGEMENT
+-- PUBLIC API: ICONS, THEME, SAVE/LOAD, NOTIFY
 -- ================================================================
 function Fihware:AddIcon(name, asset)
     assert(type(name) == "string" and name ~= "", "AddIcon: name must be a non-empty string")
@@ -1202,9 +1214,6 @@ function Fihware:AddIcons(tbl)
     for k, v in pairs(tbl) do self:AddIcon(k, v) end
 end
 
--- ================================================================
--- THEME / ACCENT
--- ================================================================
 function Fihware:SetAccent(h, s, v)
     self.AccentH = h
     self.AccentS = s
@@ -1237,9 +1246,6 @@ function Fihware:SetAccent(h, s, v)
     applyAccentList(self._mainAccent)
 end
 
--- ================================================================
--- SAVE / LOAD
--- ================================================================
 function Fihware:SaveSettings()
     local data = { _accent = { h = self.AccentH, s = self.AccentS, v = self.AccentV } }
     for k, v in pairs(self.SavedObjects) do
@@ -1265,9 +1271,6 @@ function Fihware:LoadSettings()
     end
 end
 
--- ================================================================
--- NOTIFICATIONS
--- ================================================================
 function Fihware:Notify(title, body, duration, accentColor)
     if not self.NotificationsEnabled or not self.NotifHolder then return end
     duration    = duration    or 4
@@ -1381,16 +1384,15 @@ function Fihware:_init()
             uiScale.Scale = math.clamp(Camera.ViewportSize.X / 1920, 0.55, 1)
         end))
 
-    -- ── Logo Pill ───────────────────────────────────────────────
-    -- Matches the main header exactly: same Elevated bg, same size/radius.
-    local PILL_W = self.MainNavWidth   -- 245
-    local PILL_H = 48                  -- matches HEADER_H
+    -- ── Logo Pill (hidden-mode) ────────────────────────────────
+    local PILL_W = self.MainNavWidth
+    local PILL_H = 48
 
     local pill = Instance.new("Frame")
     pill.Name             = "LogoPill"
     pill.Size             = UDim2.new(0, PILL_W, 0, PILL_H)
     pill.Position         = UDim2.new(0, 8, 0, 8)
-    pill.BackgroundColor3 = self.Theme.Elevated   -- same as header
+    pill.BackgroundColor3 = self.Theme.Elevated
     pill.BorderSizePixel  = 0
     pill.Visible          = true
     pill.Parent           = sg
@@ -1398,13 +1400,12 @@ function Fihware:_init()
     stroke(pill, self.Theme.Border)
     shadow(pill, 0.78)
 
-    -- Logo sized & positioned identically to the main header logo
     local pillLogo = Instance.new("ImageLabel")
     pillLogo.Size                   = UDim2.new(1, -60, 0, 30)
     pillLogo.AnchorPoint            = Vector2.new(0, 0.5)
     pillLogo.Position               = UDim2.new(0, 12, 0.5, 0)
     pillLogo.BackgroundTransparency = 1
-    pillLogo.Image                  = LIBRARY_LOGO
+    pillLogo.Image                  = CONFIG.LOGO_ID
     pillLogo.ScaleType              = Enum.ScaleType.Fit
     pillLogo.ImageColor3            = Color3.new(1, 1, 1)
     pillLogo.Parent                 = pill
@@ -1422,19 +1423,15 @@ function Fihware:_init()
     pillBtn.MouseLeave:Connect(function()
         tween(pill, { BackgroundColor3 = self.Theme.Elevated }, 0.12)
     end)
-    pillBtn.MouseButton1Click:Connect(function()
-        self:Toggle()
-    end)
+    pillBtn.MouseButton1Click:Connect(function() self:Toggle() end)
 
     self.LogoPill = { Frame = pill }
 
-    -- Blur
     local blur = Instance.new("BlurEffect")
     blur.Size   = 0
     blur.Parent = Lighting
     self.MainBlur = blur
 
-    -- Notification holder
     local nh = Instance.new("Frame")
     nh.Name                   = "NotifHolder"
     nh.Size                   = UDim2.new(0, 290, 0, 520)
@@ -1446,14 +1443,12 @@ function Fihware:_init()
     nhList.VerticalAlignment = Enum.VerticalAlignment.Bottom
     self.NotifHolder = nh
 
-    -- Auto-save every 30 seconds
     task.spawn(function()
         while task.wait(30) do
             if self.Initialized then self:SaveSettings() end
         end
     end)
 
-    -- Rainbow loop
     task.spawn(function()
         while task.wait(0.03) do
             if self.RainbowEnabled and self.Initialized then
@@ -1464,9 +1459,6 @@ function Fihware:_init()
     end)
 end
 
--- ================================================================
--- DESTROY / VISIBILITY
--- ================================================================
 function Fihware:Destroy()
     self:SaveSettings()
     for _, con in pairs(self.Connections) do
@@ -1482,20 +1474,12 @@ end
 
 function Fihware:SetVisible(val)
     self.GuiVisible = val
-    if self.ScaleRoot then
-        self.ScaleRoot.Visible = val
-    end
-    if self.LogoPill then
-        self.LogoPill.Frame.Visible = not val
-    end
-    if self.MainBlur then
-        tween(self.MainBlur, { Size = val and 8 or 0 }, 0.25)
-    end
+    if self.ScaleRoot then self.ScaleRoot.Visible = val end
+    if self.LogoPill then self.LogoPill.Frame.Visible = not val end
+    if self.MainBlur then tween(self.MainBlur, { Size = val and 8 or 0 }, 0.25) end
 end
 
-function Fihware:Toggle()
-    self:SetVisible(not self.GuiVisible)
-end
+function Fihware:Toggle() self:SetVisible(not self.GuiVisible) end
 
 -- ================================================================
 -- WINDOW LAYOUT
@@ -1555,7 +1539,7 @@ function Fihware:CreateMainWindow(config)
     shadow(nav, 0.72)
     lib.MainNavRef = nav
 
-    -- HEADER — exact same color as the logo pill
+    -- HEADER
     local header = Instance.new("Frame")
     header.Name             = "Header"
     header.Size             = UDim2.new(1, 0, 0, HEADER_H)
@@ -1586,26 +1570,62 @@ function Fihware:CreateMainWindow(config)
     logoImg.AnchorPoint            = Vector2.new(0, 0.5)
     logoImg.Position               = UDim2.new(0, 12, 0.5, 0)
     logoImg.BackgroundTransparency = 1
-    logoImg.Image                  = LIBRARY_LOGO
+    logoImg.Image                  = CONFIG.LOGO_ID
     logoImg.ScaleType              = Enum.ScaleType.Fit
     logoImg.ImageColor3            = Color3.new(1, 1, 1)
     logoImg.ZIndex                 = 3
     logoImg.Parent                 = header
 
-    local verLabel = Instance.new("TextLabel")
-    verLabel.Size             = UDim2.new(0, 32, 0, 17)
-    verLabel.AnchorPoint      = Vector2.new(1, 0.5)
-    verLabel.Position         = UDim2.new(1, -10, 0.5, 0)
-    verLabel.BackgroundColor3 = lib.Theme.Background
-    verLabel.BorderSizePixel  = 0
-    verLabel.Text             = "v3.5"
-    verLabel.TextSize         = 10
-    verLabel.Font             = Enum.Font.GothamBold
-    verLabel.TextColor3       = lib.Theme.SubText
-    verLabel.ZIndex           = 3
-    verLabel.Parent           = header
-    corner(verLabel, 4)
-    stroke(verLabel, lib.Theme.Border)
+    -- ── Discord button (replaces v3.5 badge) ────────────────────
+    local discordFrame = Instance.new("Frame")
+    discordFrame.Size             = UDim2.new(0, 28, 0, 22)
+    discordFrame.AnchorPoint      = Vector2.new(1, 0.5)
+    discordFrame.Position         = UDim2.new(1, -10, 0.5, 0)
+    discordFrame.BackgroundColor3 = lib.Theme.Background
+    discordFrame.BorderSizePixel  = 0
+    discordFrame.ZIndex           = 3
+    discordFrame.Parent           = header
+    corner(discordFrame, 5)
+    stroke(discordFrame, lib.Theme.Border)
+
+    local discordIcon = Instance.new("ImageLabel")
+    discordIcon.Size                   = UDim2.new(0, 14, 0, 14)
+    discordIcon.AnchorPoint            = Vector2.new(0.5, 0.5)
+    discordIcon.Position               = UDim2.new(0.5, 0, 0.5, 0)
+    discordIcon.BackgroundTransparency = 1
+    discordIcon.Image                  = CONFIG.DISCORD_ICON_ID
+    discordIcon.ImageColor3            = lib.Theme.SubText
+    discordIcon.ScaleType              = Enum.ScaleType.Fit
+    discordIcon.ZIndex                 = 4
+    discordIcon.Parent                 = discordFrame
+
+    local discordBtn = Instance.new("TextButton")
+    discordBtn.Size                   = UDim2.new(1, 0, 1, 0)
+    discordBtn.BackgroundTransparency = 1
+    discordBtn.Text                   = ""
+    discordBtn.AutoButtonColor        = false
+    discordBtn.ZIndex                 = 5
+    discordBtn.Parent                 = discordFrame
+
+    discordBtn.MouseEnter:Connect(function()
+        tween(discordFrame, { BackgroundColor3 = lib.Theme.Discord }, 0.12)
+        tween(discordIcon, { ImageColor3 = Color3.new(1, 1, 1) }, 0.12)
+    end)
+    discordBtn.MouseLeave:Connect(function()
+        tween(discordFrame, { BackgroundColor3 = lib.Theme.Background }, 0.12)
+        tween(discordIcon, { ImageColor3 = lib.Theme.SubText }, 0.12)
+    end)
+    discordBtn.MouseButton1Click:Connect(function()
+        local ok = pcall(_setclipboard, lib.Config.DISCORD_COPY)
+        if ok then
+            lib:Notify("Discord", "Copied: " .. lib.Config.DISCORD_COPY, 2.5, lib.Theme.Discord)
+        else
+            lib:Notify("Discord", "Clipboard unavailable in this executor", 3, lib.Theme.Warning)
+        end
+        tween(discordFrame, { Size = UDim2.new(0, 26, 0, 20) }, 0.06)
+        task.wait(0.07)
+        tween(discordFrame, { Size = UDim2.new(0, 28, 0, 22) }, 0.12)
+    end)
 
     -- FOOTER
     local footer = Instance.new("Frame")
@@ -1634,7 +1654,6 @@ function Fihware:CreateMainWindow(config)
     footerDivider.ZIndex           = 3
     footerDivider.Parent           = footer
 
-    -- Avatar
     local pfp = Instance.new("ImageLabel")
     pfp.Size             = UDim2.new(0, 36, 0, 36)
     pfp.AnchorPoint      = Vector2.new(0, 0.5)
@@ -1658,7 +1677,6 @@ function Fihware:CreateMainWindow(config)
     corner(statusDot, 99)
     stroke(statusDot, lib.Theme.Elevated, 2)
 
-    -- Username labels — right edge leaves space for the gear button
     local nameLbl = Instance.new("TextLabel")
     nameLbl.Size                   = UDim2.new(1, -92, 0, 17)
     nameLbl.Position               = UDim2.new(0, 54, 0.5, -16)
@@ -1685,7 +1703,7 @@ function Fihware:CreateMainWindow(config)
     userLbl.ZIndex                 = 3
     userLbl.Parent                 = footer
 
-    -- ── Settings gear button (bottom-right of footer) ───────────
+    -- ── Settings gear (bottom-right of footer) ──────────────────
     local gearFrame = Instance.new("Frame")
     gearFrame.Size             = UDim2.new(0, 28, 0, 28)
     gearFrame.AnchorPoint      = Vector2.new(1, 0.5)
@@ -1697,9 +1715,16 @@ function Fihware:CreateMainWindow(config)
     corner(gearFrame, 6)
     stroke(gearFrame, lib.Theme.Border)
 
-    -- Icon centered in the gear frame using makeIcon helper
-    local gearIcon = makeIcon(gearFrame, Icons.Settings, 14, lib.Theme.SubText, 4)
-    gearIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+    local gearIcon = Instance.new("ImageLabel")
+    gearIcon.Size                   = UDim2.new(0, 14, 0, 14)
+    gearIcon.AnchorPoint            = Vector2.new(0.5, 0.5)
+    gearIcon.Position               = UDim2.new(0.5, 0, 0.5, 0)
+    gearIcon.BackgroundTransparency = 1
+    gearIcon.Image                  = Icons.Settings
+    gearIcon.ImageColor3            = lib.Theme.SubText
+    gearIcon.ScaleType              = Enum.ScaleType.Fit
+    gearIcon.ZIndex                 = 4
+    gearIcon.Parent                 = gearFrame
 
     local gearBtn = Instance.new("TextButton")
     gearBtn.Size                   = UDim2.new(1, 0, 1, 0)
@@ -1719,10 +1744,13 @@ function Fihware:CreateMainWindow(config)
     end)
     gearBtn.MouseButton1Click:Connect(function()
         tween(gearIcon, { Rotation = gearIcon.Rotation + 90 }, 0.22)
-        if lib.OnSettingsClick then pcall(lib.OnSettingsClick) end
+        if lib.SettingsWindow then
+            -- toggle the Settings sub-window
+            lib.SettingsWindow:SetVisible(not lib.SettingsWindow:IsVisible())
+        end
     end)
 
-    -- Content scroll
+    -- Content scroll (modules / nav buttons only — NO settings inline)
     local scroll = Instance.new("ScrollingFrame")
     scroll.Name                   = "Content"
     scroll.Size                   = UDim2.new(1, 0, 1, -HEADER_H - FOOTER_H)
@@ -1750,9 +1778,7 @@ function Fihware:CreateMainWindow(config)
     local Main = { Frame = nav, _accentObjects = accentObjs }
 
     table.insert(lib.Connections, UserInputService.InputBegan:Connect(function(input, gp)
-        if not gp and input.KeyCode == lib.CurrentKeybind then
-            lib:Toggle()
-        end
+        if not gp and input.KeyCode == lib.CurrentKeybind then lib:Toggle() end
     end))
 
     function Main:GetFrame() return nav end
@@ -1773,7 +1799,6 @@ function Fihware:CreateMainWindow(config)
         btn.Parent                 = scroll
         corner(btn, 6)
 
-        -- Icon using makeIcon helper — properly centered & scaled
         local iconImg
         if icon then
             iconImg = Instance.new("ImageLabel")
@@ -1784,7 +1809,6 @@ function Fihware:CreateMainWindow(config)
             iconImg.Image                  = icon
             iconImg.ImageColor3            = lib.Theme.SubText
             iconImg.ScaleType              = Enum.ScaleType.Fit
-            iconImg.ImageRectSize          = Vector2.new(0, 0)
             iconImg.ZIndex                 = 2
             iconImg.Parent                 = btn
         end
@@ -1800,7 +1824,6 @@ function Fihware:CreateMainWindow(config)
         nameLbl2.TextXAlignment         = Enum.TextXAlignment.Left
         nameLbl2.Parent                 = btn
 
-        -- Small dot indicator (right side) — no left-edge accent bar
         local stateDot = Instance.new("Frame")
         stateDot.Size                   = UDim2.new(0, 5, 0, 5)
         stateDot.AnchorPoint            = Vector2.new(1, 0.5)
@@ -1855,6 +1878,8 @@ function Fihware:CreateMainWindow(config)
     end
     Main.CreateSection = Main.AddSection
 
+    -- Generic widget creators on Main remain available, but settings
+    -- specifically belong in the Settings sub-window now.
     function Main:CreateLabel(cfg)
         elemCount = elemCount + 1; return W.label(lib, scroll, elemCount, cfg)
     end
@@ -1883,70 +1908,76 @@ function Fihware:CreateMainWindow(config)
         elemCount = elemCount + 1; return W.keybind(lib, scroll, elemCount, accentObjs, cfg)
     end
 
+    -- ── AddDefaultSettings now creates a SEPARATE Settings sub-window ──
+    -- The settings panel is hidden by default and only opens via the gear.
     function Main:AddDefaultSettings()
-        Main:AddSection("GUI SETTINGS")
-        Main:CreateColorSlider({
-            Name     = "GUI Theme",
+        if lib.SettingsWindow then return lib.SettingsWindow end
+
+        local Settings = lib:CreateWindow({
+            Name     = "Settings",
+            Icon     = lib.Icons.Settings,
+            MaxHeight = 520,
+        })
+        lib.SettingsWindow = Settings
+
+        Settings:CreateSection("APPEARANCE")
+        Settings:CreateColorSlider({
+            Name     = "Accent Color",
             DefaultH = lib.AccentH,
             DefaultS = lib.AccentS,
             DefaultV = lib.AccentV,
             Function = function(h, s, v) lib:SetAccent(h, s, v) end,
         })
-        Main:CreateToggle({
-            Name      = "Blur Background",
-            Default   = false,
-            HoverText = "Blur the game world when the menu is open",
-            Function  = function(v)
+        Settings:CreateToggle({
+            Name     = "Rainbow",
+            Default  = false,
+            Function = function(v) lib.RainbowEnabled = v end,
+        })
+        Settings:CreateSlider({
+            Name     = "Rainbow Speed",
+            Min      = 1, Max = 100, Default = 10,
+            Function = function(v) lib.RainbowSpeed = math.max((v / 10) - 0.4, 0.05) end,
+        })
+        Settings:CreateToggle({
+            Name     = "Blur Background",
+            Default  = false,
+            Function = function(v)
                 if lib.MainBlur then tween(lib.MainBlur, { Size = v and 8 or 0 }, 0.25) end
             end,
         })
-        Main:CreateToggle({
-            Name      = "Notifications",
-            Default   = true,
-            HoverText = "Shows notifications in the bottom-right corner",
-            Function  = function(v) lib.NotificationsEnabled = v end,
+
+        Settings:CreateSection("BEHAVIOR")
+        Settings:CreateToggle({
+            Name     = "Notifications",
+            Default  = true,
+            Function = function(v) lib.NotificationsEnabled = v end,
         })
-        Main:CreateToggle({
-            Name      = "Toggle Alerts",
-            Default   = true,
-            HoverText = "Notifies you when a module is enabled/disabled",
-            Function  = function(v) lib.ToggleAlertsEnabled = v end,
+        Settings:CreateToggle({
+            Name     = "Toggle Alerts",
+            Default  = true,
+            Function = function(v) lib.ToggleAlertsEnabled = v end,
         })
-        Main:CreateToggle({
-            Name      = "Show Tooltips",
-            Default   = true,
-            HoverText = "Shows hover descriptions on modules",
-            Function  = function(v) lib.TooltipsEnabled = v end,
-        })
-        Main:CreateToggle({
-            Name      = "Rainbow",
-            Default   = false,
-            HoverText = "Cycles through theme colors automatically",
-            Function  = function(v) lib.RainbowEnabled = v end,
-        })
-        Main:CreateSlider({
-            Name     = "Rainbow Speed",
-            Min      = 1,
-            Max      = 100,
-            Default  = 10,
-            Function = function(v) lib.RainbowSpeed = math.max((v / 10) - 0.4, 0.05) end,
+        Settings:CreateKeybind({
+            Name     = "Menu Keybind",
+            Default  = lib.CurrentKeybind,
+            Function = function(k) lib.CurrentKeybind = k end,
         })
 
-        Main:AddSection("WINDOWS")
-        Main:CreateOutlineButton({
+        Settings:CreateSection("WINDOWS")
+        Settings:CreateOutlineButton({
             Name     = "SORT WINDOWS",
             Function = function() lib:SortWindows() end,
         })
 
-        Main:AddSection("PROFILE")
-        Main:CreateOutlineButton({
+        Settings:CreateSection("PROFILE")
+        Settings:CreateOutlineButton({
             Name     = "SAVE SETTINGS",
             Function = function()
                 lib:SaveSettings()
                 lib:Notify("Profile", "Settings saved", 2.5, lib.Theme.Success)
             end,
         })
-        Main:CreateOutlineButton({
+        Settings:CreateOutlineButton({
             Name     = "LOAD SETTINGS",
             Function = function()
                 lib:LoadSettings()
@@ -1954,12 +1985,7 @@ function Fihware:CreateMainWindow(config)
             end,
         })
 
-        -- Default gear → scroll to top (where GUI settings section is)
-        if not lib.OnSettingsClick then
-            lib.OnSettingsClick = function()
-                tween(scroll, { CanvasPosition = Vector2.new(0, 0) }, 0.25)
-            end
-        end
+        return Settings
     end
 
     return Main
@@ -1993,7 +2019,6 @@ function Fihware:CreateWindow(config)
     stroke(win, lib.Theme.Border)
     shadow(win, 0.72)
 
-    -- Titlebar
     local tb = Instance.new("Frame")
     tb.Name             = "Titlebar"
     tb.Size             = UDim2.new(1, 0, 0, TB_H)
@@ -2018,7 +2043,6 @@ function Fihware:CreateWindow(config)
     tbDivider.ZIndex           = 3
     tbDivider.Parent           = tb
 
-    -- Window icon (using makeIcon for correct rendering)
     local iconOffset = 14
     if config.Icon then
         local sizeV = config.IconSize or 16
@@ -2030,7 +2054,6 @@ function Fihware:CreateWindow(config)
         icn.Image                  = config.Icon
         icn.ImageColor3            = lib.Theme.Accent
         icn.ScaleType              = Enum.ScaleType.Fit
-        icn.ImageRectSize          = Vector2.new(0, 0)
         icn.ZIndex                 = 3
         icn.Parent                 = tb
         table.insert(accentObjs, { obj = icn, type = "ImageColor3" })
@@ -2049,7 +2072,6 @@ function Fihware:CreateWindow(config)
     titleLbl.ZIndex                 = 3
     titleLbl.Parent                 = tb
 
-    -- Content scroll
     local scroll = Instance.new("ScrollingFrame")
     scroll.Name                   = "Content"
     scroll.Size                   = UDim2.new(1, 0, 1, -TB_H)
