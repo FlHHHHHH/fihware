@@ -1,13 +1,13 @@
 -- ================================================================
---   🐟 fihware UI Library  v3.4
+--   🐟 fihware UI Library  v3.5
 --   Vape V4 1:1 — modernized, polished, dark-themed
 --
---   Changes in v3.4:
---     • Subtle UIGradient on window/header/titlebar surfaces
---     • Richer dark-mode palette (warmer deep blacks, more contrast)
---     • Logo pill background now matches header Elevated color exactly
---     • Settings gear icon button in footer (opens main window's
---       built-in settings section via callback)
+--   Changes in v3.5:
+--     • Reverted to v3.3 original color palette
+--     • Logo pill background now exactly matches the shown header
+--     • Removed left-edge accent bars from ALL elements
+--     • Fixed icon rendering on nav buttons (ScaleType.Fit, AnchorPoint)
+--     • Settings gear icon in footer bottom-right corner
 --
 --   Single-column main window with module nav + inline settings,
 --   side-by-side sub-windows (smooth, auto-sorted).
@@ -111,7 +111,7 @@ end
 
 local function stroke(parent, color, thickness)
     local s = Instance.new("UIStroke")
-    s.Color = color or Color3.fromRGB(38, 36, 40)
+    s.Color = color or Color3.fromRGB(34, 33, 35)
     s.Thickness = thickness or 1
     s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     s.Parent = parent
@@ -154,14 +154,20 @@ local function shadow(parent, transparency)
     return img
 end
 
--- Adds a subtle vertical gradient to a frame
--- topColor and bottomColor should be Color3 values
-local function applyGradient(parent, topColor, bottomColor, rotation)
-    local grad = Instance.new("UIGradient")
-    grad.Color    = ColorSequence.new(topColor, bottomColor)
-    grad.Rotation = rotation or 90
-    grad.Parent   = parent
-    return grad
+-- Creates a properly-rendered icon ImageLabel.
+-- Uses ScaleType.Fit and AnchorPoint centering so rbxassetid icons display correctly.
+local function makeIcon(parent, assetId, size, color, zindex)
+    local img = Instance.new("ImageLabel")
+    img.Size                   = UDim2.new(0, size, 0, size)
+    img.AnchorPoint            = Vector2.new(0.5, 0.5)
+    img.BackgroundTransparency = 1
+    img.Image                  = assetId
+    img.ImageColor3            = color
+    img.ScaleType              = Enum.ScaleType.Fit
+    img.ImageRectSize          = Vector2.new(0, 0)   -- full image, no atlas crop
+    img.ZIndex                 = zindex or 3
+    img.Parent                 = parent
+    return img
 end
 
 local function tooltip(lib, hostBtn, parentRow, text)
@@ -277,20 +283,10 @@ function W.toggle(lib, parent, layoutOrder, accentObjs, cfg)
     btn.AutoButtonColor        = false
     btn.Parent                 = row
 
-    local accentBar = Instance.new("Frame")
-    accentBar.Size                   = UDim2.new(0, 2, 0, 16)
-    accentBar.AnchorPoint            = Vector2.new(0, 0.5)
-    accentBar.Position               = UDim2.new(0, 0, 0.5, 0)
-    accentBar.BackgroundColor3       = lib.Theme.Accent
-    accentBar.BackgroundTransparency = 1
-    accentBar.BorderSizePixel        = 0
-    accentBar.Parent                 = row
-    corner(accentBar, 1)
-    table.insert(accentObjs, { obj = accentBar, type = "BackgroundColor3" })
-
+    -- Name label: full width, left-padded, right side leaves room for indicator
     local nameLbl = Instance.new("TextLabel")
-    nameLbl.Size                   = UDim2.new(1, -38, 1, 0)
-    nameLbl.Position               = UDim2.new(0, 14, 0, 0)
+    nameLbl.Size                   = UDim2.new(1, -44, 1, 0)
+    nameLbl.Position               = UDim2.new(0, 12, 0, 0)
     nameLbl.BackgroundTransparency = 1
     nameLbl.Text                   = eName
     nameLbl.TextSize               = 13
@@ -299,6 +295,7 @@ function W.toggle(lib, parent, layoutOrder, accentObjs, cfg)
     nameLbl.TextXAlignment         = Enum.TextXAlignment.Left
     nameLbl.Parent                 = row
 
+    -- Small square indicator (no accent bar, just a clean checkbox-style box)
     local indicator = Instance.new("Frame")
     indicator.Size             = UDim2.new(0, 18, 0, 18)
     indicator.AnchorPoint      = Vector2.new(1, 0.5)
@@ -327,7 +324,6 @@ function W.toggle(lib, parent, layoutOrder, accentObjs, cfg)
     local function setEnabled(val, silent)
         enabled     = val
         api.Enabled = val
-        tween(accentBar, { BackgroundTransparency = val and 0 or 1 }, 0.18)
         tween(indFill, {
             BackgroundTransparency = val and 0 or 1,
             Size = val and UDim2.new(0, 10, 0, 10) or UDim2.new(0, 0, 0, 0),
@@ -362,10 +358,7 @@ function W.toggle(lib, parent, layoutOrder, accentObjs, cfg)
         SaveValue    = enabled,
         Load         = function(v) setEnabled(v, true) end,
         UpdateAccent = function(c)
-            if enabled then
-                indFill.BackgroundColor3   = c
-                accentBar.BackgroundColor3 = c
-            end
+            if enabled then indFill.BackgroundColor3 = c end
         end,
     }
     if cfg.Default ~= nil then setEnabled(cfg.Default, true) end
@@ -394,7 +387,7 @@ function W.slider(lib, parent, layoutOrder, accentObjs, cfg)
 
     local nameLbl = Instance.new("TextLabel")
     nameLbl.Size                   = UDim2.new(0.6, 0, 0, 20)
-    nameLbl.Position               = UDim2.new(0, 14, 0, 8)
+    nameLbl.Position               = UDim2.new(0, 12, 0, 8)
     nameLbl.BackgroundTransparency = 1
     nameLbl.Text                   = eName
     nameLbl.TextSize               = 13
@@ -413,7 +406,7 @@ function W.slider(lib, parent, layoutOrder, accentObjs, cfg)
     local valLbl = Instance.new("TextLabel")
     valLbl.Size                   = UDim2.new(0.4, -14, 0, 20)
     valLbl.AnchorPoint            = Vector2.new(1, 0)
-    valLbl.Position               = UDim2.new(1, -14, 0, 8)
+    valLbl.Position               = UDim2.new(1, -12, 0, 8)
     valLbl.BackgroundTransparency = 1
     valLbl.Text                   = fmtVal(value)
     valLbl.TextSize               = 12
@@ -424,8 +417,8 @@ function W.slider(lib, parent, layoutOrder, accentObjs, cfg)
     table.insert(accentObjs, { obj = valLbl, type = "TextColor3" })
 
     local track = Instance.new("Frame")
-    track.Size             = UDim2.new(1, -28, 0, 4)
-    track.Position         = UDim2.new(0, 14, 0, 36)
+    track.Size             = UDim2.new(1, -24, 0, 4)
+    track.Position         = UDim2.new(0, 12, 0, 36)
     track.BackgroundColor3 = lib.Theme.Border
     track.BorderSizePixel  = 0
     track.Parent           = row
@@ -567,7 +560,7 @@ function W.dropdown(lib, parent, layoutOrder, accentObjs, cfg)
 
     local nameLbl = Instance.new("TextLabel")
     nameLbl.Size                   = UDim2.new(0.5, 0, 1, 0)
-    nameLbl.Position               = UDim2.new(0, 14, 0, 0)
+    nameLbl.Position               = UDim2.new(0, 12, 0, 0)
     nameLbl.BackgroundTransparency = 1
     nameLbl.Text                   = eName
     nameLbl.TextSize               = 13
@@ -841,7 +834,7 @@ function W.textbox(lib, parent, layoutOrder, accentObjs, cfg)
 
     local nameLbl = Instance.new("TextLabel")
     nameLbl.Size                   = UDim2.new(1, -16, 0, 14)
-    nameLbl.Position               = UDim2.new(0, 14, 0, 7)
+    nameLbl.Position               = UDim2.new(0, 12, 0, 7)
     nameLbl.BackgroundTransparency = 1
     nameLbl.Text                   = eName
     nameLbl.TextSize               = 11
@@ -908,7 +901,7 @@ function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
 
     local nameLbl = Instance.new("TextLabel")
     nameLbl.Size                   = UDim2.new(1, -56, 0, 16)
-    nameLbl.Position               = UDim2.new(0, 14, 0, 6)
+    nameLbl.Position               = UDim2.new(0, 12, 0, 6)
     nameLbl.BackgroundTransparency = 1
     nameLbl.Text                   = eName
     nameLbl.TextSize               = 12
@@ -920,7 +913,7 @@ function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
     local swatch = Instance.new("Frame")
     swatch.Size             = UDim2.new(0, 30, 0, 16)
     swatch.AnchorPoint      = Vector2.new(1, 0)
-    swatch.Position         = UDim2.new(1, -14, 0, 6)
+    swatch.Position         = UDim2.new(1, -12, 0, 6)
     swatch.BackgroundColor3 = Color3.fromHSV(h, s, v)
     swatch.BorderSizePixel  = 0
     swatch.Parent           = row
@@ -929,8 +922,8 @@ function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
 
     local function makeBar(yOff)
         local bar = Instance.new("Frame")
-        bar.Size             = UDim2.new(1, -28, 0, 6)
-        bar.Position         = UDim2.new(0, 14, 0, yOff)
+        bar.Size             = UDim2.new(1, -24, 0, 6)
+        bar.Position         = UDim2.new(0, 12, 0, yOff)
         bar.BackgroundColor3 = Color3.new(1, 1, 1)
         bar.BorderSizePixel  = 0
         bar.Parent           = row
@@ -944,7 +937,7 @@ function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
         k.ZIndex           = 2
         k.Parent           = bar
         corner(k, 99)
-        stroke(k, Color3.fromRGB(38, 36, 40))
+        stroke(k, Color3.fromRGB(34, 33, 35))
 
         local hb = Instance.new("TextButton")
         hb.Size                   = UDim2.new(1, 0, 0, 20)
@@ -1065,7 +1058,7 @@ function W.keybind(lib, parent, layoutOrder, accentObjs, cfg)
 
     local nameLbl = Instance.new("TextLabel")
     nameLbl.Size                   = UDim2.new(0.55, 0, 1, 0)
-    nameLbl.Position               = UDim2.new(0, 14, 0, 0)
+    nameLbl.Position               = UDim2.new(0, 12, 0, 0)
     nameLbl.BackgroundTransparency = 1
     nameLbl.Text                   = eName
     nameLbl.TextSize               = 13
@@ -1134,32 +1127,24 @@ end
 function Fihware.new()
     local self = setmetatable({}, Fihware)
 
-    -- ── Improved dark-mode palette ───────────────────────────────
-    -- Deeper, richer blacks with subtle warm undertone.
-    -- More distinct layering: Background → Surface → Elevated → ElevatedHvr
-    -- Borders are slightly more visible for better depth cues.
+    -- ── v3.3 original color palette (reverted) ──────────────────
     self.Theme = {
         Accent       = Color3.fromRGB(80, 155, 255),
-        AccentDark   = Color3.fromRGB(48, 108, 200),
+        AccentDark   = Color3.fromRGB(50, 110, 200),
         AccentText   = Color3.fromRGB(255, 255, 255),
-        Background   = Color3.fromRGB(9, 9, 11),       -- near-black, cooler
-        Surface      = Color3.fromRGB(14, 13, 16),     -- base window bg
-        Elevated     = Color3.fromRGB(20, 19, 23),     -- slightly lifted panels
-        ElevatedHvr  = Color3.fromRGB(28, 27, 32),     -- hover state
-        Border       = Color3.fromRGB(38, 36, 44),     -- more visible border
-        BorderLight  = Color3.fromRGB(54, 52, 62),     -- lighter border variant
-        Text         = Color3.fromRGB(200, 198, 208),  -- slightly cooler body text
-        TextBright   = Color3.fromRGB(236, 234, 245),  -- near-white with a hint of violet
-        SubText      = Color3.fromRGB(128, 126, 140),  -- muted secondary
-        Muted        = Color3.fromRGB(76, 74, 88),     -- very muted labels
-        Success      = Color3.fromRGB(65, 195, 120),
-        Warning      = Color3.fromRGB(238, 168, 55),
-        Error        = Color3.fromRGB(230, 75, 75),
-        -- Gradient helpers (used by applyGradient)
-        SurfaceTop   = Color3.fromRGB(18, 17, 22),     -- top of window gradient
-        SurfaceBot   = Color3.fromRGB(12, 11, 15),     -- bottom of window gradient
-        HeaderTop    = Color3.fromRGB(26, 25, 30),     -- top of header gradient
-        HeaderBot    = Color3.fromRGB(18, 17, 22),     -- bottom of header gradient
+        Background   = Color3.fromRGB(13, 12, 14),
+        Surface      = Color3.fromRGB(18, 17, 19),
+        Elevated     = Color3.fromRGB(23, 22, 24),
+        ElevatedHvr  = Color3.fromRGB(31, 30, 32),
+        Border       = Color3.fromRGB(34, 33, 35),
+        BorderLight  = Color3.fromRGB(48, 47, 49),
+        Text         = Color3.fromRGB(208, 208, 210),
+        TextBright   = Color3.fromRGB(238, 238, 240),
+        SubText      = Color3.fromRGB(140, 140, 144),
+        Muted        = Color3.fromRGB(88, 88, 92),
+        Success      = Color3.fromRGB(70, 200, 130),
+        Warning      = Color3.fromRGB(240, 170, 60),
+        Error        = Color3.fromRGB(235, 80, 80),
     }
 
     self.SavedObjects   = {}
@@ -1194,8 +1179,7 @@ function Fihware.new()
     self.Icons = {}
     for k, v in pairs(Icons) do self.Icons[k] = v end
 
-    -- Callback fired when the footer settings gear is clicked.
-    -- Set this to a function that opens/scrolls to your settings section.
+    -- Optional callback: set this to open/scroll to settings when gear is clicked.
     self.OnSettingsClick = nil
 
     return self
@@ -1299,8 +1283,6 @@ function Fihware:Notify(title, body, duration, accentColor)
     corner(notif, 7)
     stroke(notif, self.Theme.Border)
     shadow(notif, 0.75)
-    -- Subtle gradient on notification card
-    applyGradient(notif, self.Theme.SurfaceTop, self.Theme.SurfaceBot)
 
     tween(notif, { BackgroundTransparency = 0 }, 0.22)
 
@@ -1400,25 +1382,23 @@ function Fihware:_init()
         end))
 
     -- ── Logo Pill ───────────────────────────────────────────────
-    -- Now uses the same Elevated color + gradient as the main header
-    local PILL_W = self.MainNavWidth
-    local PILL_H = 48
+    -- Matches the main header exactly: same Elevated bg, same size/radius.
+    local PILL_W = self.MainNavWidth   -- 245
+    local PILL_H = 48                  -- matches HEADER_H
 
     local pill = Instance.new("Frame")
     pill.Name             = "LogoPill"
     pill.Size             = UDim2.new(0, PILL_W, 0, PILL_H)
     pill.Position         = UDim2.new(0, 8, 0, 8)
-    -- Match the header's Elevated background exactly
-    pill.BackgroundColor3 = self.Theme.Elevated
+    pill.BackgroundColor3 = self.Theme.Elevated   -- same as header
     pill.BorderSizePixel  = 0
     pill.Visible          = true
     pill.Parent           = sg
     corner(pill, 8)
     stroke(pill, self.Theme.Border)
     shadow(pill, 0.78)
-    -- Same gradient direction as the main header
-    applyGradient(pill, self.Theme.HeaderTop, self.Theme.HeaderBot)
 
+    -- Logo sized & positioned identically to the main header logo
     local pillLogo = Instance.new("ImageLabel")
     pillLogo.Size                   = UDim2.new(1, -60, 0, 30)
     pillLogo.AnchorPoint            = Vector2.new(0, 0.5)
@@ -1466,7 +1446,7 @@ function Fihware:_init()
     nhList.VerticalAlignment = Enum.VerticalAlignment.Bottom
     self.NotifHolder = nh
 
-    -- Auto-save
+    -- Auto-save every 30 seconds
     task.spawn(function()
         while task.wait(30) do
             if self.Initialized then self:SaveSettings() end
@@ -1573,12 +1553,9 @@ function Fihware:CreateMainWindow(config)
     corner(nav, 8)
     stroke(nav, lib.Theme.Border)
     shadow(nav, 0.72)
-    -- Window body gradient — subtle top-to-bottom depth
-    applyGradient(nav, lib.Theme.SurfaceTop, lib.Theme.SurfaceBot)
-
     lib.MainNavRef = nav
 
-    -- HEADER
+    -- HEADER — exact same color as the logo pill
     local header = Instance.new("Frame")
     header.Name             = "Header"
     header.Size             = UDim2.new(1, 0, 0, HEADER_H)
@@ -1587,13 +1564,11 @@ function Fihware:CreateMainWindow(config)
     header.ZIndex           = 2
     header.Parent           = nav
     corner(header, 8)
-    -- Header gradient — slightly lighter at top for a "raised" feel
-    applyGradient(header, lib.Theme.HeaderTop, lib.Theme.HeaderBot)
 
     local headerCover = Instance.new("Frame")
     headerCover.Size             = UDim2.new(1, 0, 0, 10)
     headerCover.Position         = UDim2.new(0, 0, 1, -10)
-    headerCover.BackgroundColor3 = lib.Theme.HeaderBot
+    headerCover.BackgroundColor3 = lib.Theme.Elevated
     headerCover.BorderSizePixel  = 0
     headerCover.Parent           = header
 
@@ -1623,7 +1598,7 @@ function Fihware:CreateMainWindow(config)
     verLabel.Position         = UDim2.new(1, -10, 0.5, 0)
     verLabel.BackgroundColor3 = lib.Theme.Background
     verLabel.BorderSizePixel  = 0
-    verLabel.Text             = "v3.4"
+    verLabel.Text             = "v3.5"
     verLabel.TextSize         = 10
     verLabel.Font             = Enum.Font.GothamBold
     verLabel.TextColor3       = lib.Theme.SubText
@@ -1643,13 +1618,11 @@ function Fihware:CreateMainWindow(config)
     footer.ZIndex           = 2
     footer.Parent           = nav
     corner(footer, 8)
-    -- Footer gradient — mirrors header direction
-    applyGradient(footer, lib.Theme.HeaderBot, lib.Theme.HeaderTop)
 
     local footerCover = Instance.new("Frame")
     footerCover.Size             = UDim2.new(1, 0, 0, 10)
     footerCover.Position         = UDim2.new(0, 0, 0, 0)
-    footerCover.BackgroundColor3 = lib.Theme.HeaderBot
+    footerCover.BackgroundColor3 = lib.Theme.Elevated
     footerCover.BorderSizePixel  = 0
     footerCover.Parent           = footer
 
@@ -1661,7 +1634,7 @@ function Fihware:CreateMainWindow(config)
     footerDivider.ZIndex           = 3
     footerDivider.Parent           = footer
 
-    -- Avatar / pfp
+    -- Avatar
     local pfp = Instance.new("ImageLabel")
     pfp.Size             = UDim2.new(0, 36, 0, 36)
     pfp.AnchorPoint      = Vector2.new(0, 0.5)
@@ -1685,9 +1658,9 @@ function Fihware:CreateMainWindow(config)
     corner(statusDot, 99)
     stroke(statusDot, lib.Theme.Elevated, 2)
 
-    -- Username labels — shifted right to leave room for settings gear on far right
+    -- Username labels — right edge leaves space for the gear button
     local nameLbl = Instance.new("TextLabel")
-    nameLbl.Size                   = UDim2.new(1, -92, 0, 17)   -- right edge leaves 46px for gear
+    nameLbl.Size                   = UDim2.new(1, -92, 0, 17)
     nameLbl.Position               = UDim2.new(0, 54, 0.5, -16)
     nameLbl.BackgroundTransparency = 1
     nameLbl.Text                   = LocalPlayer.DisplayName
@@ -1713,10 +1686,8 @@ function Fihware:CreateMainWindow(config)
     userLbl.Parent                 = footer
 
     -- ── Settings gear button (bottom-right of footer) ───────────
-    -- Uses Icons.Settings (rbxassetid://111755297486537)
-    local gearSize  = 26
     local gearFrame = Instance.new("Frame")
-    gearFrame.Size             = UDim2.new(0, gearSize, 0, gearSize)
+    gearFrame.Size             = UDim2.new(0, 28, 0, 28)
     gearFrame.AnchorPoint      = Vector2.new(1, 0.5)
     gearFrame.Position         = UDim2.new(1, -10, 0.5, 0)
     gearFrame.BackgroundColor3 = lib.Theme.Background
@@ -1726,15 +1697,9 @@ function Fihware:CreateMainWindow(config)
     corner(gearFrame, 6)
     stroke(gearFrame, lib.Theme.Border)
 
-    local gearIcon = Instance.new("ImageLabel")
-    gearIcon.Size                   = UDim2.new(0, 14, 0, 14)
-    gearIcon.AnchorPoint            = Vector2.new(0.5, 0.5)
-    gearIcon.Position               = UDim2.new(0.5, 0, 0.5, 0)
-    gearIcon.BackgroundTransparency = 1
-    gearIcon.Image                  = Icons.Settings
-    gearIcon.ImageColor3            = lib.Theme.SubText
-    gearIcon.ZIndex                 = 4
-    gearIcon.Parent                 = gearFrame
+    -- Icon centered in the gear frame using makeIcon helper
+    local gearIcon = makeIcon(gearFrame, Icons.Settings, 14, lib.Theme.SubText, 4)
+    gearIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
 
     local gearBtn = Instance.new("TextButton")
     gearBtn.Size                   = UDim2.new(1, 0, 1, 0)
@@ -1753,18 +1718,9 @@ function Fihware:CreateMainWindow(config)
         tween(gearIcon,  { ImageColor3      = lib.Theme.SubText    }, 0.1)
     end)
     gearBtn.MouseButton1Click:Connect(function()
-        -- Spin animation
         tween(gearIcon, { Rotation = gearIcon.Rotation + 90 }, 0.22)
-        -- Fire user callback if set, otherwise just open the GUI
-        if lib.OnSettingsClick then
-            pcall(lib.OnSettingsClick)
-        end
+        if lib.OnSettingsClick then pcall(lib.OnSettingsClick) end
     end)
-
-    -- Keep gear icon accent-tinted when accent changes
-    table.insert(accentObjs, { obj = gearIcon, type = "ImageColor3" })
-    -- Override: only accent on hover, so remove from list if you want strictly SubText.
-    -- Keeping it accent-aware so it updates when rainbow changes etc.
 
     -- Content scroll
     local scroll = Instance.new("ScrollingFrame")
@@ -1817,31 +1773,25 @@ function Fihware:CreateMainWindow(config)
         btn.Parent                 = scroll
         corner(btn, 6)
 
-        local accentBar = Instance.new("Frame")
-        accentBar.Size                   = UDim2.new(0, 2, 0, 18)
-        accentBar.AnchorPoint            = Vector2.new(0, 0.5)
-        accentBar.Position               = UDim2.new(0, 0, 0.5, 0)
-        accentBar.BackgroundColor3       = lib.Theme.Accent
-        accentBar.BackgroundTransparency = 1
-        accentBar.BorderSizePixel        = 0
-        accentBar.Parent                 = btn
-        corner(accentBar, 1)
-        table.insert(accentObjs, { obj = accentBar, type = "BackgroundColor3" })
-
+        -- Icon using makeIcon helper — properly centered & scaled
         local iconImg
         if icon then
             iconImg = Instance.new("ImageLabel")
-            iconImg.Size                   = UDim2.new(0, 15, 0, 15)
-            iconImg.Position               = UDim2.new(0, 14, 0.5, -7)
+            iconImg.Size                   = UDim2.new(0, 16, 0, 16)
+            iconImg.AnchorPoint            = Vector2.new(0, 0.5)
+            iconImg.Position               = UDim2.new(0, 12, 0.5, 0)
             iconImg.BackgroundTransparency = 1
             iconImg.Image                  = icon
             iconImg.ImageColor3            = lib.Theme.SubText
+            iconImg.ScaleType              = Enum.ScaleType.Fit
+            iconImg.ImageRectSize          = Vector2.new(0, 0)
+            iconImg.ZIndex                 = 2
             iconImg.Parent                 = btn
         end
 
         local nameLbl2 = Instance.new("TextLabel")
-        nameLbl2.Size                   = UDim2.new(1, -46, 1, 0)
-        nameLbl2.Position               = UDim2.new(0, icon and 35 or 16, 0, 0)
+        nameLbl2.Size                   = UDim2.new(1, -42, 1, 0)
+        nameLbl2.Position               = UDim2.new(0, icon and 36 or 12, 0, 0)
         nameLbl2.BackgroundTransparency = 1
         nameLbl2.Text                   = name
         nameLbl2.TextSize               = 13
@@ -1850,10 +1800,11 @@ function Fihware:CreateMainWindow(config)
         nameLbl2.TextXAlignment         = Enum.TextXAlignment.Left
         nameLbl2.Parent                 = btn
 
+        -- Small dot indicator (right side) — no left-edge accent bar
         local stateDot = Instance.new("Frame")
         stateDot.Size                   = UDim2.new(0, 5, 0, 5)
         stateDot.AnchorPoint            = Vector2.new(1, 0.5)
-        stateDot.Position               = UDim2.new(1, -14, 0.5, 0)
+        stateDot.Position               = UDim2.new(1, -12, 0.5, 0)
         stateDot.BackgroundColor3       = lib.Theme.Accent
         stateDot.BackgroundTransparency = 1
         stateDot.BorderSizePixel        = 0
@@ -1864,9 +1815,8 @@ function Fihware:CreateMainWindow(config)
         local function setActive(v)
             active = v
             if window then window:SetVisible(v) end
-            tween(nameLbl2,  { TextColor3 = v and lib.Theme.TextBright or lib.Theme.SubText }, 0.18)
-            tween(stateDot,  { BackgroundTransparency = v and 0 or 1 }, 0.18)
-            tween(accentBar, { BackgroundTransparency = v and 0 or 1 }, 0.18)
+            tween(nameLbl2, { TextColor3 = v and lib.Theme.TextBright or lib.Theme.SubText }, 0.18)
+            tween(stateDot, { BackgroundTransparency = v and 0 or 1 }, 0.18)
             tween(btn, {
                 BackgroundTransparency = v and 0 or 1,
                 BackgroundColor3       = lib.Theme.Elevated,
@@ -2004,11 +1954,9 @@ function Fihware:CreateMainWindow(config)
             end,
         })
 
-        -- Wire the gear button to scroll the content to the top (settings section)
-        -- Users can override lib.OnSettingsClick with any custom behaviour
+        -- Default gear → scroll to top (where GUI settings section is)
         if not lib.OnSettingsClick then
             lib.OnSettingsClick = function()
-                -- Scroll to top of main nav content (where GUI settings live)
                 tween(scroll, { CanvasPosition = Vector2.new(0, 0) }, 0.25)
             end
         end
@@ -2044,8 +1992,6 @@ function Fihware:CreateWindow(config)
     corner(win, 8)
     stroke(win, lib.Theme.Border)
     shadow(win, 0.72)
-    -- Sub-window body gradient
-    applyGradient(win, lib.Theme.SurfaceTop, lib.Theme.SurfaceBot)
 
     -- Titlebar
     local tb = Instance.new("Frame")
@@ -2056,12 +2002,11 @@ function Fihware:CreateWindow(config)
     tb.ZIndex           = 2
     tb.Parent           = win
     corner(tb, 8)
-    applyGradient(tb, lib.Theme.HeaderTop, lib.Theme.HeaderBot)
 
     local tbCover = Instance.new("Frame")
     tbCover.Size             = UDim2.new(1, 0, 0, 10)
     tbCover.Position         = UDim2.new(0, 0, 1, -10)
-    tbCover.BackgroundColor3 = lib.Theme.HeaderBot
+    tbCover.BackgroundColor3 = lib.Theme.Elevated
     tbCover.BorderSizePixel  = 0
     tbCover.Parent           = tb
 
@@ -2073,26 +2018,19 @@ function Fihware:CreateWindow(config)
     tbDivider.ZIndex           = 3
     tbDivider.Parent           = tb
 
-    -- Thin accent line on the left of the titlebar
-    local tbAccent = Instance.new("Frame")
-    tbAccent.Size             = UDim2.new(0, 2, 0, 20)
-    tbAccent.AnchorPoint      = Vector2.new(0, 0.5)
-    tbAccent.Position         = UDim2.new(0, 0, 0.5, 0)
-    tbAccent.BackgroundColor3 = lib.Theme.Accent
-    tbAccent.BorderSizePixel  = 0
-    tbAccent.Parent           = tb
-    corner(tbAccent, 1)
-    table.insert(accentObjs, { obj = tbAccent, type = "BackgroundColor3" })
-
+    -- Window icon (using makeIcon for correct rendering)
     local iconOffset = 14
     if config.Icon then
         local sizeV = config.IconSize or 16
         local icn = Instance.new("ImageLabel")
         icn.Size                   = UDim2.new(0, sizeV, 0, sizeV)
-        icn.Position               = UDim2.new(0, 14, 0.5, -sizeV / 2)
+        icn.AnchorPoint            = Vector2.new(0, 0.5)
+        icn.Position               = UDim2.new(0, 14, 0.5, 0)
         icn.BackgroundTransparency = 1
         icn.Image                  = config.Icon
         icn.ImageColor3            = lib.Theme.Accent
+        icn.ScaleType              = Enum.ScaleType.Fit
+        icn.ImageRectSize          = Vector2.new(0, 0)
         icn.ZIndex                 = 3
         icn.Parent                 = tb
         table.insert(accentObjs, { obj = icn, type = "ImageColor3" })
