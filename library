@@ -35,8 +35,8 @@ local CONFIG = {
 
     -- Discord button (replaces the old v3.5 version label).
     -- Click the button to copy DISCORD_COPY to the clipboard.
-    DISCORD_ICON_ID = "rbxassetid://18505728250",
-    DISCORD_COPY    = "discord.gg/fihware",   -- <-- change this to your invite/handle
+    DISCORD_ICON_ID = "rbxassetid://125322760717720",   -- FIX #1: corrected asset ID
+    DISCORD_COPY    = "discord.gg/fihware",
 
     -- Drop shadow used on every floating panel
     SHADOW_ID       = "rbxassetid://6014261993",
@@ -163,9 +163,6 @@ local function shadow(parent, transparency)
     return img
 end
 
--- Robust icon factory.
--- Renders any rbxassetid icon at the requested size, properly centered,
--- with no atlas cropping and no aspect-ratio surprises.
 local function makeIcon(parent, assetId, size, color)
     local holder = Instance.new("Frame")
     holder.Size                   = UDim2.new(0, size, 0, size)
@@ -180,7 +177,6 @@ local function makeIcon(parent, assetId, size, color)
     img.ScaleType              = Enum.ScaleType.Fit
     img.Parent                 = holder
 
-    -- Expose the inner image as the "main" object for color tweens
     holder.Image = img
     return holder, img
 end
@@ -1171,7 +1167,7 @@ function Fihware.new()
     self.LogoPill       = nil
     self.NotifHolder    = nil
     self.MainNavRef     = nil
-    self.SettingsWindow = nil   -- created lazily by AddDefaultSettings
+    self.SettingsWindow = nil
     self.Initialized    = false
 
     self.RainbowEnabled = false
@@ -1191,7 +1187,6 @@ function Fihware.new()
     self.Icons = {}
     for k, v in pairs(Icons) do self.Icons[k] = v end
 
-    -- expose CONFIG at runtime so users can edit DISCORD_COPY etc. on the fly
     self.Config = CONFIG
 
     return self
@@ -1384,7 +1379,6 @@ function Fihware:_init()
             uiScale.Scale = math.clamp(Camera.ViewportSize.X / 1920, 0.55, 1)
         end))
 
-    -- ── Logo Pill (hidden-mode) ────────────────────────────────
     local PILL_W = self.MainNavWidth
     local PILL_H = 48
 
@@ -1576,7 +1570,7 @@ function Fihware:CreateMainWindow(config)
     logoImg.ZIndex                 = 3
     logoImg.Parent                 = header
 
-    -- ── Discord button (replaces v3.5 badge) ────────────────────
+    -- ── Discord button ───────────────────────────────────────────
     local discordFrame = Instance.new("Frame")
     discordFrame.Size             = UDim2.new(0, 28, 0, 22)
     discordFrame.AnchorPoint      = Vector2.new(1, 0.5)
@@ -1594,7 +1588,7 @@ function Fihware:CreateMainWindow(config)
     discordIcon.Position               = UDim2.new(0.5, 0, 0.5, 0)
     discordIcon.BackgroundTransparency = 1
     discordIcon.Image                  = CONFIG.DISCORD_ICON_ID
-    discordIcon.ImageColor3            = lib.Theme.SubText
+    discordIcon.ImageColor3            = lib.Theme.Text   -- FIX #2: was SubText (near-invisible)
     discordIcon.ScaleType              = Enum.ScaleType.Fit
     discordIcon.ZIndex                 = 4
     discordIcon.Parent                 = discordFrame
@@ -1613,7 +1607,7 @@ function Fihware:CreateMainWindow(config)
     end)
     discordBtn.MouseLeave:Connect(function()
         tween(discordFrame, { BackgroundColor3 = lib.Theme.Background }, 0.12)
-        tween(discordIcon, { ImageColor3 = lib.Theme.SubText }, 0.12)
+        tween(discordIcon, { ImageColor3 = lib.Theme.Text }, 0.12)  -- FIX #3: was SubText
     end)
     discordBtn.MouseButton1Click:Connect(function()
         local ok = pcall(_setclipboard, lib.Config.DISCORD_COPY)
@@ -1703,7 +1697,7 @@ function Fihware:CreateMainWindow(config)
     userLbl.ZIndex                 = 3
     userLbl.Parent                 = footer
 
-    -- ── Settings gear (bottom-right of footer) ──────────────────
+    -- ── Settings gear ────────────────────────────────────────────
     local gearFrame = Instance.new("Frame")
     gearFrame.Size             = UDim2.new(0, 28, 0, 28)
     gearFrame.AnchorPoint      = Vector2.new(1, 0.5)
@@ -1721,7 +1715,7 @@ function Fihware:CreateMainWindow(config)
     gearIcon.Position               = UDim2.new(0.5, 0, 0.5, 0)
     gearIcon.BackgroundTransparency = 1
     gearIcon.Image                  = Icons.Settings
-    gearIcon.ImageColor3            = lib.Theme.SubText
+    gearIcon.ImageColor3            = lib.Theme.Text   -- FIX #4: was SubText (near-invisible)
     gearIcon.ScaleType              = Enum.ScaleType.Fit
     gearIcon.ZIndex                 = 4
     gearIcon.Parent                 = gearFrame
@@ -1740,17 +1734,15 @@ function Fihware:CreateMainWindow(config)
     end)
     gearBtn.MouseLeave:Connect(function()
         tween(gearFrame, { BackgroundColor3 = lib.Theme.Background }, 0.1)
-        tween(gearIcon,  { ImageColor3      = lib.Theme.SubText    }, 0.1)
+        tween(gearIcon,  { ImageColor3      = lib.Theme.Text }, 0.1)  -- FIX #5: was SubText
     end)
     gearBtn.MouseButton1Click:Connect(function()
         tween(gearIcon, { Rotation = gearIcon.Rotation + 90 }, 0.22)
         if lib.SettingsWindow then
-            -- toggle the Settings sub-window
             lib.SettingsWindow:SetVisible(not lib.SettingsWindow:IsVisible())
         end
     end)
 
-    -- Content scroll (modules / nav buttons only — NO settings inline)
     local scroll = Instance.new("ScrollingFrame")
     scroll.Name                   = "Content"
     scroll.Size                   = UDim2.new(1, 0, 1, -HEADER_H - FOOTER_H)
@@ -1878,8 +1870,6 @@ function Fihware:CreateMainWindow(config)
     end
     Main.CreateSection = Main.AddSection
 
-    -- Generic widget creators on Main remain available, but settings
-    -- specifically belong in the Settings sub-window now.
     function Main:CreateLabel(cfg)
         elemCount = elemCount + 1; return W.label(lib, scroll, elemCount, cfg)
     end
@@ -1908,8 +1898,6 @@ function Fihware:CreateMainWindow(config)
         elemCount = elemCount + 1; return W.keybind(lib, scroll, elemCount, accentObjs, cfg)
     end
 
-    -- ── AddDefaultSettings now creates a SEPARATE Settings sub-window ──
-    -- The settings panel is hidden by default and only opens via the gear.
     function Main:AddDefaultSettings()
         if lib.SettingsWindow then return lib.SettingsWindow end
 
