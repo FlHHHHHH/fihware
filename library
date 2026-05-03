@@ -10,6 +10,14 @@
 --     • Polished spacing, hover states, and section dividers
 --     • Cleaner indicator pills, rounder corners, smoother tweens
 --
+--   Bug fixes applied:
+--     • FIX #1-5  (original): Discord icon ID, icon colors SubText→Text
+--     • FIX #6: AddWindowButton icon initial color SubText→Text
+--     • FIX #7: AddWindowButton MouseLeave icon color SubText→Text
+--     • FIX #8: AddWindowButton setActive inactive icon color SubText→Text
+--     • FIX #9: makeIcon dead holder.Image assignment removed
+--     • FIX #10: makeIcon exposed as Fihware:MakeIcon() public method
+--
 --   Usage:
 --     local Fihware = loadstring(game:HttpGet(URL))()
 --     local Lib = Fihware.new()
@@ -35,7 +43,7 @@ local CONFIG = {
 
     -- Discord button (replaces the old v3.5 version label).
     -- Click the button to copy DISCORD_COPY to the clipboard.
-    DISCORD_ICON_ID = "rbxassetid://125322760717720",   -- FIX #1: corrected asset ID
+    DISCORD_ICON_ID = "rbxassetid://125322760717720",
     DISCORD_COPY    = "discord.gg/fihware",
 
     -- Drop shadow used on every floating panel
@@ -90,11 +98,11 @@ local Camera           = workspace.CurrentCamera
 -- ================================================================
 -- SAFE EXECUTOR FUNCTIONS
 -- ================================================================
-local _isfile      = isfile      or function() return false end
-local _isfolder    = isfolder    or function() return false end
-local _makefolder  = makefolder  or function() end
-local _readfile    = readfile    or function() return "{}" end
-local _writefile   = writefile   or function() end
+local _isfile       = isfile       or function() return false end
+local _isfolder     = isfolder     or function() return false end
+local _makefolder   = makefolder   or function() end
+local _readfile     = readfile     or function() return "{}" end
+local _writefile    = writefile    or function() end
 local _setclipboard = setclipboard or (toclipboard) or function() end
 
 -- ================================================================
@@ -163,6 +171,8 @@ local function shadow(parent, transparency)
     return img
 end
 
+-- FIX #9: removed dead `holder.Image = img` assignment (Frame has no .Image property).
+-- FIX #10: this function is now exposed publicly as Fihware:MakeIcon() below.
 local function makeIcon(parent, assetId, size, color)
     local holder = Instance.new("Frame")
     holder.Size                   = UDim2.new(0, size, 0, size)
@@ -177,7 +187,6 @@ local function makeIcon(parent, assetId, size, color)
     img.ScaleType              = Enum.ScaleType.Fit
     img.Parent                 = holder
 
-    holder.Image = img
     return holder, img
 end
 
@@ -1209,6 +1218,12 @@ function Fihware:AddIcons(tbl)
     for k, v in pairs(tbl) do self:AddIcon(k, v) end
 end
 
+-- FIX #10: expose makeIcon as a public method so scripts can use it directly.
+-- Returns holder (Frame) and img (ImageLabel) so callers can tween ImageColor3 etc.
+function Fihware:MakeIcon(parent, assetId, size, color)
+    return makeIcon(parent, assetId, size, color)
+end
+
 function Fihware:SetAccent(h, s, v)
     self.AccentH = h
     self.AccentS = s
@@ -1588,7 +1603,7 @@ function Fihware:CreateMainWindow(config)
     discordIcon.Position               = UDim2.new(0.5, 0, 0.5, 0)
     discordIcon.BackgroundTransparency = 1
     discordIcon.Image                  = CONFIG.DISCORD_ICON_ID
-    discordIcon.ImageColor3            = lib.Theme.Text   -- FIX #2: was SubText (near-invisible)
+    discordIcon.ImageColor3            = lib.Theme.Text   -- FIX #2
     discordIcon.ScaleType              = Enum.ScaleType.Fit
     discordIcon.ZIndex                 = 4
     discordIcon.Parent                 = discordFrame
@@ -1607,7 +1622,7 @@ function Fihware:CreateMainWindow(config)
     end)
     discordBtn.MouseLeave:Connect(function()
         tween(discordFrame, { BackgroundColor3 = lib.Theme.Background }, 0.12)
-        tween(discordIcon, { ImageColor3 = lib.Theme.Text }, 0.12)  -- FIX #3: was SubText
+        tween(discordIcon, { ImageColor3 = lib.Theme.Text }, 0.12)  -- FIX #3
     end)
     discordBtn.MouseButton1Click:Connect(function()
         local ok = pcall(_setclipboard, lib.Config.DISCORD_COPY)
@@ -1715,7 +1730,7 @@ function Fihware:CreateMainWindow(config)
     gearIcon.Position               = UDim2.new(0.5, 0, 0.5, 0)
     gearIcon.BackgroundTransparency = 1
     gearIcon.Image                  = Icons.Settings
-    gearIcon.ImageColor3            = lib.Theme.Text   -- FIX #4: was SubText (near-invisible)
+    gearIcon.ImageColor3            = lib.Theme.Text   -- FIX #4
     gearIcon.ScaleType              = Enum.ScaleType.Fit
     gearIcon.ZIndex                 = 4
     gearIcon.Parent                 = gearFrame
@@ -1734,7 +1749,7 @@ function Fihware:CreateMainWindow(config)
     end)
     gearBtn.MouseLeave:Connect(function()
         tween(gearFrame, { BackgroundColor3 = lib.Theme.Background }, 0.1)
-        tween(gearIcon,  { ImageColor3      = lib.Theme.Text }, 0.1)  -- FIX #5: was SubText
+        tween(gearIcon,  { ImageColor3      = lib.Theme.Text }, 0.1)  -- FIX #5
     end)
     gearBtn.MouseButton1Click:Connect(function()
         tween(gearIcon, { Rotation = gearIcon.Rotation + 90 }, 0.22)
@@ -1799,7 +1814,7 @@ function Fihware:CreateMainWindow(config)
             iconImg.Position               = UDim2.new(0, 12, 0.5, 0)
             iconImg.BackgroundTransparency = 1
             iconImg.Image                  = icon
-            iconImg.ImageColor3            = lib.Theme.SubText
+            iconImg.ImageColor3            = lib.Theme.Text   -- FIX #6: was SubText (near-invisible)
             iconImg.ScaleType              = Enum.ScaleType.Fit
             iconImg.ZIndex                 = 2
             iconImg.Parent                 = btn
@@ -1830,14 +1845,15 @@ function Fihware:CreateMainWindow(config)
         local function setActive(v)
             active = v
             if window then window:SetVisible(v) end
-            tween(nameLbl2, { TextColor3 = v and lib.Theme.TextBright or lib.Theme.SubText }, 0.18)
+            tween(nameLbl2, { TextColor3 = v and lib.Theme.TextBright or lib.Theme.Text }, 0.18)
             tween(stateDot, { BackgroundTransparency = v and 0 or 1 }, 0.18)
             tween(btn, {
                 BackgroundTransparency = v and 0 or 1,
                 BackgroundColor3       = lib.Theme.Elevated,
             }, 0.18)
             if iconImg then
-                tween(iconImg, { ImageColor3 = v and lib.Theme.Accent or lib.Theme.SubText }, 0.18)
+                -- FIX #8: inactive state was SubText (near-invisible), now uses Text
+                tween(iconImg, { ImageColor3 = v and lib.Theme.Accent or lib.Theme.Text }, 0.18)
             end
         end
 
@@ -1845,14 +1861,15 @@ function Fihware:CreateMainWindow(config)
             if not active then
                 tween(btn,      { BackgroundTransparency = 0, BackgroundColor3 = lib.Theme.Elevated }, 0.1)
                 tween(nameLbl2, { TextColor3 = lib.Theme.Text }, 0.1)
-                if iconImg then tween(iconImg, { ImageColor3 = lib.Theme.Text }, 0.1) end
+                if iconImg then tween(iconImg, { ImageColor3 = lib.Theme.TextBright }, 0.1) end
             end
         end)
         btn.MouseLeave:Connect(function()
             if not active then
                 tween(btn,      { BackgroundTransparency = 1 }, 0.1)
                 tween(nameLbl2, { TextColor3 = lib.Theme.SubText }, 0.1)
-                if iconImg then tween(iconImg, { ImageColor3 = lib.Theme.SubText }, 0.1) end
+                -- FIX #7: was SubText (near-invisible), now restores to Text
+                if iconImg then tween(iconImg, { ImageColor3 = lib.Theme.Text }, 0.1) end
             end
         end)
         btn.MouseButton1Click:Connect(function() setActive(not active) end)
@@ -1902,8 +1919,8 @@ function Fihware:CreateMainWindow(config)
         if lib.SettingsWindow then return lib.SettingsWindow end
 
         local Settings = lib:CreateWindow({
-            Name     = "Settings",
-            Icon     = lib.Icons.Settings,
+            Name      = "Settings",
+            Icon      = lib.Icons.Settings,
             MaxHeight = 520,
         })
         lib.SettingsWindow = Settings
