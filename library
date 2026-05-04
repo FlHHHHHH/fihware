@@ -1,22 +1,6 @@
 -- ================================================================
---   🐟 fihware UI Library  v3.6
---   Vape V4 1:1 — modernized, polished, dark-themed
---
---   Changes in v3.6:
---     • All asset IDs lifted into top-level CONFIG block (easy to find/edit)
---     • Fixed icon rendering across the board (clean ScaleType.Fit setup)
---     • v3.5 version badge replaced with Discord button — click to copy
---     • UI settings now ONLY accessible via the gear button (separate panel)
---     • Polished spacing, hover states, and section dividers
---     • Cleaner indicator pills, rounder corners, smoother tweens
---
---   Bug fixes applied:
---     • FIX #1-5  (original): Discord icon ID, icon colors SubText→Text
---     • FIX #6: AddWindowButton icon initial color SubText→Text
---     • FIX #7: AddWindowButton MouseLeave icon color SubText→Text
---     • FIX #8: AddWindowButton setActive inactive icon color SubText→Text
---     • FIX #9: makeIcon dead holder.Image assignment removed
---     • FIX #10: makeIcon exposed as Fihware:MakeIcon() public method
+--   🐟 Fihware UI Library
+--   Clean rewrite — no version logic, fixed icons, fixed layout
 --
 --   Usage:
 --     local Fihware = loadstring(game:HttpGet(URL))()
@@ -27,36 +11,24 @@
 --
 --     Main:AddWindowButton("Combat", Combat, Lib.Icons.Crosshair)
 --     Main:CreateSection("MISC")
---     Main:AddDefaultSettings()  -- creates the Settings panel (opens via gear)
+--     Main:AddDefaultSettings()
 -- ================================================================
 
 local Fihware = {}
 Fihware.__index = Fihware
 
 -- ================================================================
---   ⚙️  CONFIG  —  All asset IDs and copyable strings live here
---                  Edit these to rebrand without hunting through code.
+--   CONFIG  —  all asset IDs in one place
 -- ================================================================
 local CONFIG = {
-    -- Logo shown in main header AND in the hidden-mode pill
     LOGO_ID         = "rbxassetid://136012286201255",
-
-    -- Discord button (replaces the old v3.5 version label).
-    -- Click the button to copy DISCORD_COPY to the clipboard.
     DISCORD_ICON_ID = "rbxassetid://125322760717720",
     DISCORD_COPY    = "discord.gg/fihware",
-
-    -- Drop shadow used on every floating panel
     SHADOW_ID       = "rbxassetid://6014261993",
-
-    -- Default keybind to toggle the menu
     DEFAULT_KEY     = Enum.KeyCode.K,
-
-    -- Library version string (used for window names, save folder, etc.)
-    VERSION         = "3.6",
 }
 
--- All Lucide-style icons. Add new ones here so they show up in Lib.Icons.
+-- Lucide-style icon IDs
 local Icons = {
     Bell              = "rbxassetid://120247237876887",
     BellOff           = "rbxassetid://75023590708622",
@@ -87,36 +59,36 @@ local Icons = {
 -- ================================================================
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local RunService       = game:GetService("RunService")
 local TextService      = game:GetService("TextService")
 local Players          = game:GetService("Players")
 local HttpService      = game:GetService("HttpService")
 local Lighting         = game:GetService("Lighting")
+local RunService       = game:GetService("RunService")
 local LocalPlayer      = Players.LocalPlayer
 local Camera           = workspace.CurrentCamera
 
 -- ================================================================
--- SAFE EXECUTOR FUNCTIONS
+-- SAFE EXECUTOR STUBS
 -- ================================================================
-local _isfile       = isfile       or function() return false end
-local _isfolder     = isfolder     or function() return false end
-local _makefolder   = makefolder   or function() end
-local _readfile     = readfile     or function() return "{}" end
-local _writefile    = writefile    or function() end
-local _setclipboard = setclipboard or (toclipboard) or function() end
+local _isfile       = (isfile       and isfile)       or function() return false end
+local _isfolder     = (isfolder     and isfolder)     or function() return false end
+local _makefolder   = (makefolder   and makefolder)   or function() end
+local _readfile     = (readfile     and readfile)     or function() return "{}" end
+local _writefile    = (writefile    and writefile)    or function() end
+local _setclipboard = (setclipboard and setclipboard)
+                   or (toclipboard  and toclipboard)
+                   or function() end
 
 -- ================================================================
 -- HELPERS
 -- ================================================================
-local function tween(obj, props, t, style, dir)
+local function tw(obj, props, t, style, dir)
     if not obj or not obj.Parent then return end
-    local twn = TweenService:Create(obj, TweenInfo.new(
-        t     or 0.15,
-        style or Enum.EasingStyle.Quint,
-        dir   or Enum.EasingDirection.Out
-    ), props)
-    twn:Play()
-    return twn
+    return TweenService:Create(
+        obj,
+        TweenInfo.new(t or 0.15, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out),
+        props
+    ):Play()
 end
 
 local function corner(parent, r)
@@ -128,10 +100,10 @@ end
 
 local function stroke(parent, color, thickness)
     local s = Instance.new("UIStroke")
-    s.Color = color or Color3.fromRGB(34, 33, 35)
-    s.Thickness = thickness or 1
+    s.Color           = color     or Color3.fromRGB(34, 33, 35)
+    s.Thickness       = thickness or 1
     s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    s.Parent = parent
+    s.Parent          = parent
     return s
 end
 
@@ -154,7 +126,7 @@ local function listLayout(parent, gap, dir)
     return l
 end
 
-local function shadow(parent, transparency)
+local function shadow(parent)
     local img = Instance.new("ImageLabel")
     img.Name                   = "_Shadow"
     img.AnchorPoint            = Vector2.new(0.5, 0.5)
@@ -163,7 +135,7 @@ local function shadow(parent, transparency)
     img.BackgroundTransparency = 1
     img.Image                  = CONFIG.SHADOW_ID
     img.ImageColor3            = Color3.new(0, 0, 0)
-    img.ImageTransparency      = transparency or 0.45
+    img.ImageTransparency      = 0.5
     img.ScaleType              = Enum.ScaleType.Slice
     img.SliceCenter            = Rect.new(49, 49, 450, 450)
     img.ZIndex                 = -1
@@ -171,68 +143,44 @@ local function shadow(parent, transparency)
     return img
 end
 
--- FIX #9: removed dead `holder.Image = img` assignment (Frame has no .Image property).
--- FIX #10: this function is now exposed publicly as Fihware:MakeIcon() below.
-local function makeIcon(parent, assetId, size, color)
-    local holder = Instance.new("Frame")
-    holder.Size                   = UDim2.new(0, size, 0, size)
-    holder.BackgroundTransparency = 1
-    holder.Parent                 = parent
+-- Creates a properly sized ImageLabel icon.
+-- Returns the ImageLabel itself so callers can tween ImageColor3 etc.
+local function makeIcon(parent, assetId, size, color, zindex)
+    size   = size   or 16
+    color  = color  or Color3.new(1, 1, 1)
+    zindex = zindex or 2
 
     local img = Instance.new("ImageLabel")
-    img.Size                   = UDim2.new(1, 0, 1, 0)
+    img.Size                   = UDim2.new(0, size, 0, size)
+    img.AnchorPoint            = Vector2.new(0.5, 0.5)
+    img.Position               = UDim2.new(0.5, 0, 0.5, 0)
     img.BackgroundTransparency = 1
-    img.Image                  = assetId
-    img.ImageColor3            = color or Color3.new(1, 1, 1)
+    img.Image                  = assetId or ""
+    img.ImageColor3            = color
     img.ScaleType              = Enum.ScaleType.Fit
-    img.Parent                 = holder
-
-    return holder, img
-end
-
-local function tooltip(lib, hostBtn, parentRow, text)
-    if not text or not lib.TooltipsEnabled then return end
-    local tip = Instance.new("TextLabel")
-    tip.Size                   = UDim2.new(0, 190, 0, 0)
-    tip.AutomaticSize          = Enum.AutomaticSize.Y
-    tip.Position               = UDim2.new(0, 14, 1, 6)
-    tip.BackgroundColor3       = lib.Theme.Elevated
-    tip.BorderSizePixel        = 0
-    tip.Text                   = text
-    tip.TextSize               = 11
-    tip.Font                   = Enum.Font.Gotham
-    tip.TextColor3             = lib.Theme.SubText
-    tip.TextXAlignment         = Enum.TextXAlignment.Left
-    tip.TextYAlignment         = Enum.TextYAlignment.Top
-    tip.TextWrapped            = true
-    tip.Visible                = false
-    tip.ZIndex                 = 25
-    tip.Parent                 = parentRow
-    pad(tip, 6, 8, 6, 8)
-    corner(tip, 5)
-    stroke(tip, lib.Theme.Border)
-    hostBtn.MouseEnter:Connect(function() tip.Visible = true end)
-    hostBtn.MouseLeave:Connect(function() tip.Visible = false end)
+    img.ZIndex                 = zindex
+    img.Parent                 = parent
+    return img
 end
 
 -- ================================================================
--- WIDGET BUILDERS
+-- WIDGETS
 -- ================================================================
 local W = {}
 
-function W.section(lib, parent, layoutOrder, name)
+function W.section(lib, parent, order, name)
     local sect = Instance.new("Frame")
     sect.Size                   = UDim2.new(1, 0, 0, 28)
     sect.BackgroundTransparency = 1
-    sect.LayoutOrder            = layoutOrder
+    sect.LayoutOrder            = order
     sect.Parent                 = parent
 
     if name and name ~= "" then
-        local tw = TextService:GetTextSize(
+        local tw2 = TextService:GetTextSize(
             name:upper(), 10, Enum.Font.GothamBold, Vector2.new(9999, 9999)).X
 
         local lbl = Instance.new("TextLabel")
-        lbl.Size                   = UDim2.new(0, tw, 1, 0)
+        lbl.Size                   = UDim2.new(0, tw2, 1, 0)
         lbl.Position               = UDim2.new(0, 6, 0, 0)
         lbl.BackgroundTransparency = 1
         lbl.Text                   = name:upper()
@@ -242,19 +190,18 @@ function W.section(lib, parent, layoutOrder, name)
         lbl.TextXAlignment         = Enum.TextXAlignment.Left
         lbl.Parent                 = sect
 
-        local lineGap = 8
         local line = Instance.new("Frame")
-        line.Size             = UDim2.new(1, -(tw + 6 + lineGap + 6), 0, 1)
+        line.Size             = UDim2.new(1, -(tw2 + 6 + 8 + 6), 0, 1)
         line.AnchorPoint      = Vector2.new(0, 0.5)
-        line.Position         = UDim2.new(0, tw + 6 + lineGap, 0.5, 0)
+        line.Position         = UDim2.new(0, tw2 + 6 + 8, 0.5, 0)
         line.BackgroundColor3 = lib.Theme.Border
         line.BorderSizePixel  = 0
         line.Parent           = sect
     else
         local line = Instance.new("Frame")
-        line.Size             = UDim2.new(1, 0, 0, 1)
+        line.Size             = UDim2.new(1, -12, 0, 1)
         line.AnchorPoint      = Vector2.new(0, 0.5)
-        line.Position         = UDim2.new(0, 0, 0.5, 0)
+        line.Position         = UDim2.new(0, 6, 0.5, 0)
         line.BackgroundColor3 = lib.Theme.Border
         line.BorderSizePixel  = 0
         line.Parent           = sect
@@ -262,10 +209,11 @@ function W.section(lib, parent, layoutOrder, name)
     return sect
 end
 
-function W.label(lib, parent, layoutOrder, cfg)
+function W.label(lib, parent, order, cfg)
     cfg = cfg or {}
     local lbl = Instance.new("TextLabel")
-    lbl.Size                   = UDim2.new(1, 0, 0, 20)
+    lbl.Size                   = UDim2.new(1, 0, 0, 18)
+    lbl.AutomaticSize          = Enum.AutomaticSize.Y
     lbl.BackgroundTransparency = 1
     lbl.Text                   = cfg.Text or ""
     lbl.TextSize               = 12
@@ -273,26 +221,27 @@ function W.label(lib, parent, layoutOrder, cfg)
     lbl.TextColor3             = cfg.Color or lib.Theme.SubText
     lbl.TextXAlignment         = Enum.TextXAlignment.Left
     lbl.TextWrapped            = true
-    lbl.LayoutOrder            = layoutOrder
+    lbl.LayoutOrder            = order
     lbl.Parent                 = parent
     pad(lbl, 0, 4, 0, 6)
+
     local api = {}
-    function api:SetText(t)  lbl.Text = t end
+    function api:SetText(t)  lbl.Text       = t end
     function api:SetColor(c) lbl.TextColor3 = c end
     return api
 end
 
-function W.toggle(lib, parent, layoutOrder, accentObjs, cfg)
+function W.toggle(lib, parent, order, accentList, cfg)
     cfg = cfg or {}
     local enabled = cfg.Default or false
     local eName   = cfg.Name    or "Toggle"
 
     local row = Instance.new("Frame")
-    row.Size                   = UDim2.new(1, 0, 0, 34)
+    row.Size                   = UDim2.new(1, 0, 0, 36)
     row.BackgroundColor3       = lib.Theme.Elevated
-    row.BackgroundTransparency = 0.3
+    row.BackgroundTransparency = 0.4
     row.BorderSizePixel        = 0
-    row.LayoutOrder            = layoutOrder
+    row.LayoutOrder            = order
     row.Parent                 = parent
     corner(row, 6)
 
@@ -314,38 +263,42 @@ function W.toggle(lib, parent, layoutOrder, accentObjs, cfg)
     nameLbl.TextXAlignment         = Enum.TextXAlignment.Left
     nameLbl.Parent                 = row
 
-    local indicator = Instance.new("Frame")
-    indicator.Size             = UDim2.new(0, 18, 0, 18)
-    indicator.AnchorPoint      = Vector2.new(1, 0.5)
-    indicator.Position         = UDim2.new(1, -10, 0.5, 0)
-    indicator.BackgroundColor3 = lib.Theme.Background
-    indicator.BorderSizePixel  = 0
-    indicator.Parent           = row
-    corner(indicator, 5)
-    local indStroke = stroke(indicator, lib.Theme.BorderLight)
+    -- Pill indicator
+    local pill = Instance.new("Frame")
+    pill.Size             = UDim2.new(0, 32, 0, 18)
+    pill.AnchorPoint      = Vector2.new(1, 0.5)
+    pill.Position         = UDim2.new(1, -10, 0.5, 0)
+    pill.BackgroundColor3 = lib.Theme.Background
+    pill.BorderSizePixel  = 0
+    pill.Parent           = row
+    corner(pill, 99)
+    local pillStroke = stroke(pill, lib.Theme.Border)
 
-    local indFill = Instance.new("Frame")
-    indFill.Size                   = UDim2.new(0, 0, 0, 0)
-    indFill.AnchorPoint            = Vector2.new(0.5, 0.5)
-    indFill.Position               = UDim2.new(0.5, 0, 0.5, 0)
-    indFill.BackgroundColor3       = lib.Theme.Accent
-    indFill.BackgroundTransparency = 1
-    indFill.BorderSizePixel        = 0
-    indFill.Parent                 = indicator
-    corner(indFill, 3)
-    table.insert(accentObjs, { obj = indFill, type = "BackgroundColor3" })
+    local knob = Instance.new("Frame")
+    knob.Size             = UDim2.new(0, 12, 0, 12)
+    knob.AnchorPoint      = Vector2.new(0.5, 0.5)
+    knob.Position         = UDim2.new(0, 9, 0.5, 0)
+    knob.BackgroundColor3 = lib.Theme.Muted
+    knob.BorderSizePixel  = 0
+    knob.ZIndex           = 2
+    knob.Parent           = pill
+    corner(knob, 99)
 
     local api = { Enabled = enabled }
 
     local function setEnabled(val, silent)
         enabled     = val
         api.Enabled = val
-        tween(indFill, {
-            BackgroundTransparency = val and 0 or 1,
-            Size = val and UDim2.new(0, 10, 0, 10) or UDim2.new(0, 0, 0, 0),
+        local knobX = val and 23 or 9
+        tw(knob, {
+            Position         = UDim2.new(0, knobX, 0.5, 0),
+            BackgroundColor3 = val and lib.Theme.Accent or lib.Theme.Muted,
         }, 0.18)
-        tween(nameLbl, { TextColor3 = val and lib.Theme.TextBright or lib.Theme.Text }, 0.18)
-        indStroke.Color = val and lib.Theme.Accent or lib.Theme.BorderLight
+        tw(pill, {
+            BackgroundColor3 = val and lib.Theme.AccentDark or lib.Theme.Background,
+        }, 0.18)
+        pillStroke.Color = val and lib.Theme.Accent or lib.Theme.Border
+        tw(nameLbl, { TextColor3 = val and lib.Theme.TextBright or lib.Theme.Text }, 0.18)
 
         if not silent then
             if cfg.Function then pcall(cfg.Function, val) end
@@ -360,10 +313,10 @@ function W.toggle(lib, parent, layoutOrder, accentObjs, cfg)
     end
 
     btn.MouseEnter:Connect(function()
-        tween(row, { BackgroundTransparency = 0, BackgroundColor3 = lib.Theme.ElevatedHvr }, 0.1)
+        tw(row, { BackgroundTransparency = 0.1, BackgroundColor3 = lib.Theme.ElevatedHvr }, 0.1)
     end)
     btn.MouseLeave:Connect(function()
-        tween(row, { BackgroundTransparency = 0.3, BackgroundColor3 = lib.Theme.Elevated }, 0.1)
+        tw(row, { BackgroundTransparency = 0.4, BackgroundColor3 = lib.Theme.Elevated }, 0.1)
     end)
     btn.MouseButton1Click:Connect(function() setEnabled(not enabled) end)
 
@@ -371,33 +324,29 @@ function W.toggle(lib, parent, layoutOrder, accentObjs, cfg)
     api.Toggle = function() setEnabled(not enabled) end
 
     lib.SavedObjects[eName] = {
-        SaveValue    = enabled,
-        Load         = function(v) setEnabled(v, true) end,
-        UpdateAccent = function(c)
-            if enabled then indFill.BackgroundColor3 = c end
-        end,
+        SaveValue = enabled,
+        Load      = function(v) setEnabled(v, true) end,
     }
+
     if cfg.Default ~= nil then setEnabled(cfg.Default, true) end
     return api
 end
 
-function W.slider(lib, parent, layoutOrder, accentObjs, cfg)
+function W.slider(lib, parent, order, accentList, cfg)
     cfg = cfg or {}
     local min      = cfg.Min      or 0
     local max      = cfg.Max      or 100
-    local value    = cfg.Default  or min
+    local decimals = cfg.Decimals or 0
     local suffix   = cfg.Suffix   or ""
     local eName    = cfg.Name     or "Slider"
-    local decimals = cfg.Decimals or 0
-
-    value = math.clamp(value, min, max)
+    local value    = math.clamp(cfg.Default or min, min, max)
 
     local row = Instance.new("Frame")
-    row.Size                   = UDim2.new(1, 0, 0, 52)
+    row.Size                   = UDim2.new(1, 0, 0, 54)
     row.BackgroundColor3       = lib.Theme.Elevated
-    row.BackgroundTransparency = 0.3
+    row.BackgroundTransparency = 0.4
     row.BorderSizePixel        = 0
-    row.LayoutOrder            = layoutOrder
+    row.LayoutOrder            = order
     row.Parent                 = parent
     corner(row, 6)
 
@@ -412,11 +361,11 @@ function W.slider(lib, parent, layoutOrder, accentObjs, cfg)
     nameLbl.TextXAlignment         = Enum.TextXAlignment.Left
     nameLbl.Parent                 = row
 
-    local function fmtVal(v)
+    local function fmt(v)
         if decimals > 0 then
             return string.format("%." .. decimals .. "f", v) .. suffix
         end
-        return tostring(math.floor(v + 0.5)) .. suffix
+        return math.floor(v + 0.5) .. suffix
     end
 
     local valLbl = Instance.new("TextLabel")
@@ -424,33 +373,34 @@ function W.slider(lib, parent, layoutOrder, accentObjs, cfg)
     valLbl.AnchorPoint            = Vector2.new(1, 0)
     valLbl.Position               = UDim2.new(1, -12, 0, 8)
     valLbl.BackgroundTransparency = 1
-    valLbl.Text                   = fmtVal(value)
+    valLbl.Text                   = fmt(value)
     valLbl.TextSize               = 12
     valLbl.Font                   = Enum.Font.GothamMedium
     valLbl.TextColor3             = lib.Theme.Accent
     valLbl.TextXAlignment         = Enum.TextXAlignment.Right
     valLbl.Parent                 = row
-    table.insert(accentObjs, { obj = valLbl, type = "TextColor3" })
+    table.insert(accentList, { obj = valLbl, prop = "TextColor3" })
 
     local track = Instance.new("Frame")
     track.Size             = UDim2.new(1, -24, 0, 4)
-    track.Position         = UDim2.new(0, 12, 0, 36)
+    track.Position         = UDim2.new(0, 12, 0, 38)
     track.BackgroundColor3 = lib.Theme.Border
     track.BorderSizePixel  = 0
     track.Parent           = row
     corner(track, 99)
 
     local pct0 = (max ~= min) and ((value - min) / (max - min)) or 0
+
     local fill = Instance.new("Frame")
     fill.Size             = UDim2.new(pct0, 0, 1, 0)
     fill.BackgroundColor3 = lib.Theme.Accent
     fill.BorderSizePixel  = 0
     fill.Parent           = track
     corner(fill, 99)
-    table.insert(accentObjs, { obj = fill, type = "BackgroundColor3" })
+    table.insert(accentList, { obj = fill, prop = "BackgroundColor3" })
 
     local knob = Instance.new("Frame")
-    knob.Size             = UDim2.new(0, 11, 0, 11)
+    knob.Size             = UDim2.new(0, 12, 0, 12)
     knob.AnchorPoint      = Vector2.new(0.5, 0.5)
     knob.Position         = UDim2.new(pct0, 0, 0.5, 0)
     knob.BackgroundColor3 = Color3.new(1, 1, 1)
@@ -459,9 +409,9 @@ function W.slider(lib, parent, layoutOrder, accentObjs, cfg)
     knob.Parent           = track
     corner(knob, 99)
 
+    -- Full-row invisible hitbox so dragging anywhere on the row works
     local hitbox = Instance.new("TextButton")
-    hitbox.Size                   = UDim2.new(1, 0, 0, 52)
-    hitbox.Position               = UDim2.new(0, 0, 0, 0)
+    hitbox.Size                   = UDim2.new(1, 0, 1, 0)
     hitbox.BackgroundTransparency = 1
     hitbox.Text                   = ""
     hitbox.ZIndex                 = 4
@@ -470,9 +420,10 @@ function W.slider(lib, parent, layoutOrder, accentObjs, cfg)
     local dragging = false
     local api      = { Value = value }
 
-    local function updateSlider(x)
-        if track.AbsoluteSize.X == 0 then return end
-        local pct = math.clamp((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+    local function update(x)
+        local abs = track.AbsoluteSize.X
+        if abs == 0 then return end
+        local pct = math.clamp((x - track.AbsolutePosition.X) / abs, 0, 1)
         if decimals > 0 then
             local mult = 10 ^ decimals
             value = math.floor((min + (max - min) * pct) * mult + 0.5) / mult
@@ -482,7 +433,7 @@ function W.slider(lib, parent, layoutOrder, accentObjs, cfg)
         api.Value     = value
         fill.Size     = UDim2.new(pct, 0, 1, 0)
         knob.Position = UDim2.new(pct, 0, 0.5, 0)
-        valLbl.Text   = fmtVal(value)
+        valLbl.Text   = fmt(value)
         if cfg.Function then pcall(cfg.Function, value) end
         if lib.SavedObjects[eName] then lib.SavedObjects[eName].SaveValue = value end
     end
@@ -491,30 +442,31 @@ function W.slider(lib, parent, layoutOrder, accentObjs, cfg)
         if i.UserInputType == Enum.UserInputType.MouseButton1
         or i.UserInputType == Enum.UserInputType.Touch then
             dragging = true
-            updateSlider(i.Position.X)
-            tween(knob, { Size = UDim2.new(0, 15, 0, 15) }, 0.1)
+            update(i.Position.X)
+            tw(knob, { Size = UDim2.new(0, 16, 0, 16) }, 0.1)
         end
     end)
     UserInputService.InputChanged:Connect(function(i)
-        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement
-                      or i.UserInputType == Enum.UserInputType.Touch) then
-            updateSlider(i.Position.X)
+        if dragging and (
+            i.UserInputType == Enum.UserInputType.MouseMovement
+         or i.UserInputType == Enum.UserInputType.Touch
+        ) then
+            update(i.Position.X)
         end
     end)
     UserInputService.InputEnded:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.MouseButton1
         or i.UserInputType == Enum.UserInputType.Touch then
-            if dragging then tween(knob, { Size = UDim2.new(0, 11, 0, 11) }, 0.1) end
+            if dragging then tw(knob, { Size = UDim2.new(0, 12, 0, 12) }, 0.1) end
             dragging = false
         end
     end)
-
     hitbox.MouseEnter:Connect(function()
-        tween(row, { BackgroundTransparency = 0, BackgroundColor3 = lib.Theme.ElevatedHvr }, 0.1)
+        tw(row, { BackgroundTransparency = 0.1, BackgroundColor3 = lib.Theme.ElevatedHvr }, 0.1)
     end)
     hitbox.MouseLeave:Connect(function()
         if not dragging then
-            tween(row, { BackgroundTransparency = 0.3, BackgroundColor3 = lib.Theme.Elevated }, 0.1)
+            tw(row, { BackgroundTransparency = 0.4, BackgroundColor3 = lib.Theme.Elevated }, 0.1)
         end
     end)
 
@@ -523,44 +475,40 @@ function W.slider(lib, parent, layoutOrder, accentObjs, cfg)
         Load = function(v)
             v = math.clamp(v, min, max)
             value = v; api.Value = v
-            local pct = (max ~= min) and ((v - min) / (max - min)) or 0
-            fill.Size     = UDim2.new(pct, 0, 1, 0)
-            knob.Position = UDim2.new(pct, 0, 0.5, 0)
-            valLbl.Text   = fmtVal(v)
+            local p = (max ~= min) and ((v - min) / (max - min)) or 0
+            fill.Size     = UDim2.new(p, 0, 1, 0)
+            knob.Position = UDim2.new(p, 0, 0.5, 0)
+            valLbl.Text   = fmt(v)
             if cfg.Function then pcall(cfg.Function, v) end
-        end,
-        UpdateAccent = function(c)
-            fill.BackgroundColor3 = c
-            valLbl.TextColor3     = c
         end,
     }
     return api
 end
 
-function W.dropdown(lib, parent, layoutOrder, accentObjs, cfg)
+function W.dropdown(lib, parent, order, accentList, cfg)
     cfg = cfg or {}
     local eName    = cfg.Name    or "Dropdown"
     local list     = cfg.List    or {}
     local selected = cfg.Default or (list[1] or "")
     local open     = false
 
-    local defaultValid = false
-    for _, v in ipairs(list) do
-        if v == selected then defaultValid = true; break end
-    end
-    if not defaultValid and #list > 0 then selected = list[1] end
+    -- Validate default
+    local valid = false
+    for _, v in ipairs(list) do if v == selected then valid = true; break end end
+    if not valid then selected = list[1] or "" end
 
+    -- Outer container — grows to fit when open
     local container = Instance.new("Frame")
-    container.Size                   = UDim2.new(1, 0, 0, 34)
+    container.Size                   = UDim2.new(1, 0, 0, 36)
     container.BackgroundTransparency = 1
     container.ClipsDescendants       = false
-    container.LayoutOrder            = layoutOrder
+    container.LayoutOrder            = order
     container.Parent                 = parent
 
     local row = Instance.new("Frame")
-    row.Size                   = UDim2.new(1, 0, 0, 34)
+    row.Size                   = UDim2.new(1, 0, 0, 36)
     row.BackgroundColor3       = lib.Theme.Elevated
-    row.BackgroundTransparency = 0.3
+    row.BackgroundTransparency = 0.4
     row.BorderSizePixel        = 0
     row.ZIndex                 = 3
     row.Parent                 = container
@@ -587,9 +535,9 @@ function W.dropdown(lib, parent, layoutOrder, accentObjs, cfg)
     nameLbl.Parent                 = row
 
     local selLbl = Instance.new("TextLabel")
-    selLbl.Size                   = UDim2.new(0.5, -32, 1, 0)
+    selLbl.Size                   = UDim2.new(0.5, -28, 1, 0)
     selLbl.AnchorPoint            = Vector2.new(1, 0)
-    selLbl.Position               = UDim2.new(1, -26, 0, 0)
+    selLbl.Position               = UDim2.new(1, -22, 0, 0)
     selLbl.BackgroundTransparency = 1
     selLbl.Text                   = selected
     selLbl.TextSize               = 12
@@ -599,171 +547,169 @@ function W.dropdown(lib, parent, layoutOrder, accentObjs, cfg)
     selLbl.TextTruncate           = Enum.TextTruncate.AtEnd
     selLbl.ZIndex                 = 4
     selLbl.Parent                 = row
-    table.insert(accentObjs, { obj = selLbl, type = "TextColor3" })
+    table.insert(accentList, { obj = selLbl, prop = "TextColor3" })
 
-    local arrow = Instance.new("TextLabel")
-    arrow.Size                   = UDim2.new(0, 14, 1, 0)
-    arrow.AnchorPoint            = Vector2.new(1, 0)
-    arrow.Position               = UDim2.new(1, -10, 0, 0)
-    arrow.BackgroundTransparency = 1
-    arrow.Text                   = "▾"
-    arrow.TextSize               = 12
-    arrow.Font                   = Enum.Font.Gotham
-    arrow.TextColor3             = lib.Theme.SubText
-    arrow.ZIndex                 = 4
-    arrow.Parent                 = row
+    local arrowLbl = Instance.new("TextLabel")
+    arrowLbl.Size                   = UDim2.new(0, 14, 1, 0)
+    arrowLbl.AnchorPoint            = Vector2.new(1, 0)
+    arrowLbl.Position               = UDim2.new(1, -8, 0, 0)
+    arrowLbl.BackgroundTransparency = 1
+    arrowLbl.Text                   = "▾"
+    arrowLbl.TextSize               = 13
+    arrowLbl.Font                   = Enum.Font.Gotham
+    arrowLbl.TextColor3             = lib.Theme.SubText
+    arrowLbl.ZIndex                 = 4
+    arrowLbl.Parent                 = row
 
-    local dropFrame = Instance.new("Frame")
-    dropFrame.Size             = UDim2.new(1, 0, 0, 0)
-    dropFrame.Position         = UDim2.new(0, 0, 1, 4)
-    dropFrame.BackgroundColor3 = lib.Theme.Elevated
-    dropFrame.BorderSizePixel  = 0
-    dropFrame.ClipsDescendants = true
-    dropFrame.ZIndex           = 10
-    dropFrame.Visible          = false
-    dropFrame.Parent           = container
-    corner(dropFrame, 6)
-    stroke(dropFrame, lib.Theme.Border)
+    local ITEM_H = 30
+    local GAP    = 2
+    local VPAD   = 6
 
-    local dScroll = Instance.new("ScrollingFrame")
-    dScroll.Size                   = UDim2.new(1, 0, 1, 0)
-    dScroll.BackgroundTransparency = 1
-    dScroll.BorderSizePixel        = 0
-    dScroll.ScrollBarThickness     = 2
-    dScroll.ScrollBarImageColor3   = lib.Theme.Accent
-    dScroll.ZIndex                 = 10
-    dScroll.Parent                 = dropFrame
+    -- Dropdown panel
+    local panel = Instance.new("Frame")
+    panel.Size             = UDim2.new(1, 0, 0, 0)
+    panel.Position         = UDim2.new(0, 0, 1, 4)
+    panel.BackgroundColor3 = lib.Theme.Surface
+    panel.BorderSizePixel  = 0
+    panel.ClipsDescendants = true
+    panel.ZIndex           = 10
+    panel.Visible          = false
+    panel.Parent           = container
+    corner(panel, 6)
+    stroke(panel, lib.Theme.Border)
 
-    local dList = listLayout(dScroll, 2)
-    pad(dScroll, 4, 4, 4, 4)
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Size                   = UDim2.new(1, 0, 1, 0)
+    scroll.BackgroundTransparency = 1
+    scroll.BorderSizePixel        = 0
+    scroll.ScrollBarThickness     = 2
+    scroll.ScrollBarImageColor3   = lib.Theme.Accent
+    scroll.ZIndex                 = 11
+    scroll.Parent                 = panel
+    pad(scroll, VPAD, VPAD, VPAD, VPAD)
+    listLayout(scroll, GAP)
 
     local api = { Value = selected, List = list }
 
-    local function closeDropdown()
+    local function close()
         if not open then return end
         open = false
-        tween(dropFrame, { Size = UDim2.new(1, 0, 0, 0) }, 0.15)
-        tween(arrow, { Rotation = 0 }, 0.15)
+        tw(panel,    { Size = UDim2.new(1, 0, 0, 0) }, 0.15)
+        tw(arrowLbl, { Rotation = 0 },                 0.15)
         task.delay(0.16, function()
-            dropFrame.Visible = false
-            container.Size    = UDim2.new(1, 0, 0, 34)
+            if not open then
+                panel.Visible    = false
+                container.Size   = UDim2.new(1, 0, 0, 36)
+            end
         end)
     end
 
     local function populate()
-        for _, c in pairs(dScroll:GetChildren()) do
-            if c:IsA("Frame") then c:Destroy() end
+        for _, c in pairs(scroll:GetChildren()) do
+            if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
         end
-        local itemH = 28
-        local gap   = 2
         for idx, item in ipairs(list) do
-            local opt = Instance.new("Frame")
-            opt.Size                   = UDim2.new(1, 0, 0, itemH)
-            opt.BackgroundColor3       = item == selected and lib.Theme.ElevatedHvr or Color3.fromRGB(0,0,0)
-            opt.BackgroundTransparency = item == selected and 0 or 1
+            local isSelected = (item == selected)
+
+            local opt = Instance.new("TextButton")
+            opt.Size                   = UDim2.new(1, 0, 0, ITEM_H)
+            opt.BackgroundColor3       = isSelected and lib.Theme.ElevatedHvr or lib.Theme.Elevated
+            opt.BackgroundTransparency = isSelected and 0 or 1
             opt.BorderSizePixel        = 0
+            opt.Text                   = item
+            opt.TextSize               = 12
+            opt.Font                   = Enum.Font.GothamMedium
+            opt.TextColor3             = isSelected and lib.Theme.Accent or lib.Theme.Text
+            opt.TextXAlignment         = Enum.TextXAlignment.Left
+            opt.AutoButtonColor        = false
             opt.LayoutOrder            = idx
-            opt.ZIndex                 = 11
-            opt.Parent                 = dScroll
+            opt.ZIndex                 = 12
+            opt.Parent                 = scroll
             corner(opt, 5)
+            pad(opt, 0, 0, 0, 10)
 
-            local optBtn = Instance.new("TextButton")
-            optBtn.Size                   = UDim2.new(1, 0, 1, 0)
-            optBtn.BackgroundTransparency = 1
-            optBtn.Text                   = item
-            optBtn.TextSize               = 12
-            optBtn.Font                   = Enum.Font.GothamMedium
-            optBtn.TextColor3             = item == selected and lib.Theme.Accent or lib.Theme.Text
-            optBtn.TextXAlignment         = Enum.TextXAlignment.Left
-            optBtn.ZIndex                 = 12
-            optBtn.AutoButtonColor        = false
-            optBtn.Parent                 = opt
-            pad(optBtn, 0, 0, 0, 12)
-
-            optBtn.MouseEnter:Connect(function()
+            opt.MouseEnter:Connect(function()
                 if item ~= selected then
-                    tween(opt, { BackgroundTransparency = 0, BackgroundColor3 = lib.Theme.ElevatedHvr }, 0.08)
+                    tw(opt, { BackgroundTransparency = 0, BackgroundColor3 = lib.Theme.ElevatedHvr }, 0.08)
                 end
             end)
-            optBtn.MouseLeave:Connect(function()
-                if item ~= selected then tween(opt, { BackgroundTransparency = 1 }, 0.08) end
+            opt.MouseLeave:Connect(function()
+                if item ~= selected then tw(opt, { BackgroundTransparency = 1 }, 0.08) end
             end)
-            optBtn.MouseButton1Click:Connect(function()
+            opt.MouseButton1Click:Connect(function()
                 selected    = item
                 api.Value   = item
                 selLbl.Text = item
                 if cfg.Function then pcall(cfg.Function, item) end
                 if lib.SavedObjects[eName] then lib.SavedObjects[eName].SaveValue = item end
-                closeDropdown()
+                close()
             end)
         end
-        local total = #list * itemH + math.max(0, #list - 1) * gap + 8
-        local h = math.clamp(total, 34, 180)
-        dScroll.CanvasSize = UDim2.new(0, 0, 0, #list * 30 + 6)
-        return h
+        local totalContent = #list * ITEM_H + math.max(0, #list - 1) * GAP + VPAD * 2
+        scroll.CanvasSize  = UDim2.new(0, 0, 0, totalContent)
+        return math.clamp(totalContent, 36, 180)
     end
 
     btn.MouseEnter:Connect(function()
-        tween(row, { BackgroundTransparency = 0, BackgroundColor3 = lib.Theme.ElevatedHvr }, 0.1)
+        tw(row, { BackgroundTransparency = 0.1, BackgroundColor3 = lib.Theme.ElevatedHvr }, 0.1)
     end)
     btn.MouseLeave:Connect(function()
-        tween(row, { BackgroundTransparency = 0.3, BackgroundColor3 = lib.Theme.Elevated }, 0.1)
+        tw(row, { BackgroundTransparency = 0.4, BackgroundColor3 = lib.Theme.Elevated }, 0.1)
     end)
     btn.MouseButton1Click:Connect(function()
         open = not open
         if open then
-            local h = populate()
-            dropFrame.Visible = true
-            dropFrame.Size    = UDim2.new(1, 0, 0, 0)
-            tween(dropFrame, { Size = UDim2.new(1, 0, 0, h) }, 0.17)
-            container.Size = UDim2.new(1, 0, 0, 34 + h + 4)
-            tween(arrow, { Rotation = 180 }, 0.17)
+            local h      = populate()
+            panel.Visible = true
+            panel.Size    = UDim2.new(1, 0, 0, 0)
+            tw(panel,     { Size = UDim2.new(1, 0, 0, h) }, 0.17)
+            tw(arrowLbl,  { Rotation = 180 },               0.17)
+            container.Size = UDim2.new(1, 0, 0, 36 + h + 4)
         else
-            closeDropdown()
+            close()
         end
     end)
+
+    api.SetList = function(newList)
+        list = newList; api.List = newList
+        local stillValid = false
+        for _, v in ipairs(newList) do if v == selected then stillValid = true; break end end
+        if not stillValid then
+            selected = newList[1] or ""
+            api.Value   = selected
+            selLbl.Text = selected
+        end
+        if open then close() end
+    end
+    api.Close = close
 
     lib.SavedObjects[eName] = {
         SaveValue = selected,
         Load = function(v)
-            local valid = false
             for _, item in ipairs(list) do
-                if item == v then valid = true; break end
-            end
-            if valid then
-                selected = v; api.Value = v; selLbl.Text = v
-                if cfg.Function then pcall(cfg.Function, v) end
+                if item == v then
+                    selected = v; api.Value = v; selLbl.Text = v
+                    if cfg.Function then pcall(cfg.Function, v) end
+                    return
+                end
             end
         end,
-        UpdateAccent = function(c) selLbl.TextColor3 = c end,
     }
-    api.SetList = function(newList)
-        list = newList; api.List = newList
-        local stillValid = false
-        for _, v in ipairs(newList) do
-            if v == selected then stillValid = true; break end
-        end
-        if not stillValid and #newList > 0 then
-            selected = newList[1]; api.Value = newList[1]; selLbl.Text = newList[1]
-        end
-        if open then closeDropdown() end
-    end
-    api.Close = closeDropdown
     return api
 end
 
-function W.button(lib, parent, layoutOrder, accentObjs, cfg)
+function W.button(lib, parent, order, accentList, cfg)
     cfg = cfg or {}
     local eName = cfg.Name or "Button"
 
     local row = Instance.new("Frame")
-    row.Size             = UDim2.new(1, 0, 0, 34)
+    row.Size             = UDim2.new(1, 0, 0, 36)
     row.BackgroundColor3 = lib.Theme.Accent
     row.BorderSizePixel  = 0
-    row.LayoutOrder      = layoutOrder
+    row.LayoutOrder      = order
     row.Parent           = parent
     corner(row, 6)
-    table.insert(accentObjs, { obj = row, type = "BackgroundColor3" })
+    table.insert(accentList, { obj = row, prop = "BackgroundColor3" })
 
     local btn = Instance.new("TextButton")
     btn.Size                   = UDim2.new(1, 0, 1, 0)
@@ -771,20 +717,16 @@ function W.button(lib, parent, layoutOrder, accentObjs, cfg)
     btn.Text                   = eName
     btn.TextSize               = 13
     btn.Font                   = Enum.Font.GothamBold
-    btn.TextColor3             = lib.Theme.AccentText
+    btn.TextColor3             = Color3.new(1, 1, 1)
     btn.AutoButtonColor        = false
     btn.Parent                 = row
 
-    btn.MouseEnter:Connect(function()
-        tween(row, { BackgroundColor3 = lib.Theme.AccentDark }, 0.1)
-    end)
-    btn.MouseLeave:Connect(function()
-        tween(row, { BackgroundColor3 = lib.Theme.Accent }, 0.1)
-    end)
+    btn.MouseEnter:Connect(function() tw(row, { BackgroundColor3 = lib.Theme.AccentDark }, 0.1) end)
+    btn.MouseLeave:Connect(function() tw(row, { BackgroundColor3 = lib.Theme.Accent },     0.1) end)
     btn.MouseButton1Click:Connect(function()
-        tween(row, { Size = UDim2.new(1, 0, 0, 32) }, 0.06)
+        tw(row, { Size = UDim2.new(1, 0, 0, 33) }, 0.06)
         task.wait(0.07)
-        tween(row, { Size = UDim2.new(1, 0, 0, 34) }, 0.12)
+        tw(row, { Size = UDim2.new(1, 0, 0, 36) }, 0.12)
         if cfg.Function then pcall(cfg.Function) end
     end)
 
@@ -793,16 +735,16 @@ function W.button(lib, parent, layoutOrder, accentObjs, cfg)
     return api
 end
 
-function W.outlineButton(lib, parent, layoutOrder, accentObjs, cfg)
+function W.outlineButton(lib, parent, order, accentList, cfg)
     cfg = cfg or {}
     local eName = cfg.Name or "Button"
 
     local row = Instance.new("Frame")
-    row.Size                   = UDim2.new(1, 0, 0, 32)
+    row.Size                   = UDim2.new(1, 0, 0, 34)
     row.BackgroundColor3       = lib.Theme.Elevated
-    row.BackgroundTransparency = 0.3
+    row.BackgroundTransparency = 0.4
     row.BorderSizePixel        = 0
-    row.LayoutOrder            = layoutOrder
+    row.LayoutOrder            = order
     row.Parent                 = parent
     corner(row, 6)
     stroke(row, lib.Theme.Border)
@@ -818,12 +760,12 @@ function W.outlineButton(lib, parent, layoutOrder, accentObjs, cfg)
     btn.Parent                 = row
 
     btn.MouseEnter:Connect(function()
-        tween(row, { BackgroundTransparency = 0, BackgroundColor3 = lib.Theme.ElevatedHvr }, 0.1)
-        tween(btn, { TextColor3 = cfg.HoverColor or lib.Theme.TextBright }, 0.1)
+        tw(row, { BackgroundTransparency = 0.1, BackgroundColor3 = lib.Theme.ElevatedHvr }, 0.1)
+        tw(btn, { TextColor3 = cfg.HoverColor or lib.Theme.TextBright },                    0.1)
     end)
     btn.MouseLeave:Connect(function()
-        tween(row, { BackgroundTransparency = 0.3, BackgroundColor3 = lib.Theme.Elevated }, 0.1)
-        tween(btn, { TextColor3 = cfg.Color or lib.Theme.SubText }, 0.1)
+        tw(row, { BackgroundTransparency = 0.4, BackgroundColor3 = lib.Theme.Elevated }, 0.1)
+        tw(btn, { TextColor3 = cfg.Color or lib.Theme.SubText },                         0.1)
     end)
     btn.MouseButton1Click:Connect(function()
         if cfg.Function then pcall(cfg.Function) end
@@ -834,17 +776,17 @@ function W.outlineButton(lib, parent, layoutOrder, accentObjs, cfg)
     return api
 end
 
-function W.textbox(lib, parent, layoutOrder, accentObjs, cfg)
+function W.textbox(lib, parent, order, accentList, cfg)
     cfg = cfg or {}
     local eName = cfg.Name    or "TextBox"
     local value = cfg.Default or ""
 
     local row = Instance.new("Frame")
-    row.Size                   = UDim2.new(1, 0, 0, 54)
+    row.Size                   = UDim2.new(1, 0, 0, 56)
     row.BackgroundColor3       = lib.Theme.Elevated
-    row.BackgroundTransparency = 0.3
+    row.BackgroundTransparency = 0.4
     row.BorderSizePixel        = 0
-    row.LayoutOrder            = layoutOrder
+    row.LayoutOrder            = order
     row.Parent                 = parent
     corner(row, 6)
 
@@ -861,7 +803,7 @@ function W.textbox(lib, parent, layoutOrder, accentObjs, cfg)
 
     local inputBG = Instance.new("Frame")
     inputBG.Size             = UDim2.new(1, -20, 0, 24)
-    inputBG.Position         = UDim2.new(0, 10, 0, 24)
+    inputBG.Position         = UDim2.new(0, 10, 0, 25)
     inputBG.BackgroundColor3 = lib.Theme.Background
     inputBG.BorderSizePixel  = 0
     inputBG.Parent           = row
@@ -883,10 +825,10 @@ function W.textbox(lib, parent, layoutOrder, accentObjs, cfg)
     input.Parent                 = inputBG
 
     input.Focused:Connect(function()
-        tween(inputStroke, { Color = lib.Theme.Accent }, 0.1)
+        tw(inputStroke, { Color = lib.Theme.Accent }, 0.1)
     end)
     input.FocusLost:Connect(function(enter)
-        tween(inputStroke, { Color = lib.Theme.Border }, 0.1)
+        tw(inputStroke, { Color = lib.Theme.Border }, 0.1)
         value = input.Text
         if cfg.FocusLost then pcall(cfg.FocusLost, value, enter) end
         if lib.SavedObjects[eName] then lib.SavedObjects[eName].SaveValue = value end
@@ -899,7 +841,7 @@ function W.textbox(lib, parent, layoutOrder, accentObjs, cfg)
     return { Value = value, Object = input }
 end
 
-function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
+function W.colorSlider(lib, parent, order, accentList, cfg)
     cfg = cfg or {}
     local eName = cfg.Name     or "Color"
     local h     = math.clamp(cfg.DefaultH or lib.AccentH, 0, 1)
@@ -907,11 +849,11 @@ function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
     local v     = math.clamp(cfg.DefaultV or lib.AccentV, 0, 1)
 
     local row = Instance.new("Frame")
-    row.Size                   = UDim2.new(1, 0, 0, 96)
+    row.Size                   = UDim2.new(1, 0, 0, 100)
     row.BackgroundColor3       = lib.Theme.Elevated
-    row.BackgroundTransparency = 0.3
+    row.BackgroundTransparency = 0.4
     row.BorderSizePixel        = 0
-    row.LayoutOrder            = layoutOrder
+    row.LayoutOrder            = order
     row.Parent                 = parent
     corner(row, 6)
 
@@ -927,7 +869,7 @@ function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
     nameLbl.Parent                 = row
 
     local swatch = Instance.new("Frame")
-    swatch.Size             = UDim2.new(0, 30, 0, 16)
+    swatch.Size             = UDim2.new(0, 32, 0, 16)
     swatch.AnchorPoint      = Vector2.new(1, 0)
     swatch.Position         = UDim2.new(1, -12, 0, 6)
     swatch.BackgroundColor3 = Color3.fromHSV(h, s, v)
@@ -946,18 +888,18 @@ function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
         corner(bar, 99)
 
         local k = Instance.new("Frame")
-        k.Size             = UDim2.new(0, 11, 0, 11)
+        k.Size             = UDim2.new(0, 12, 0, 12)
         k.AnchorPoint      = Vector2.new(0.5, 0.5)
         k.BackgroundColor3 = Color3.new(1, 1, 1)
         k.BorderSizePixel  = 0
         k.ZIndex           = 2
         k.Parent           = bar
         corner(k, 99)
-        stroke(k, Color3.fromRGB(34, 33, 35))
+        stroke(k, lib.Theme.Border)
 
         local hb = Instance.new("TextButton")
-        hb.Size                   = UDim2.new(1, 0, 0, 20)
-        hb.Position               = UDim2.new(0, 0, 0, -7)
+        hb.Size                   = UDim2.new(1, 0, 0, 22)
+        hb.Position               = UDim2.new(0, 0, 0, -8)
         hb.BackgroundTransparency = 1
         hb.Text                   = ""
         hb.ZIndex                 = 3
@@ -965,10 +907,11 @@ function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
         return bar, k, hb
     end
 
-    local hBar, hKnob, hHit = makeBar(30)
-    local sBar, sKnob, sHit = makeBar(50)
-    local vBar, vKnob, vHit = makeBar(70)
+    local hBar, hKnob, hHit = makeBar(32)
+    local sBar, sKnob, sHit = makeBar(52)
+    local vBar, vKnob, vHit = makeBar(72)
 
+    -- Hue gradient
     local hGrad = Instance.new("UIGradient")
     hGrad.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0,    Color3.fromHSV(0,    1, 1)),
@@ -993,11 +936,14 @@ function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
     sKnob.Position = UDim2.new(s, 0, 0.5, 0)
     vKnob.Position = UDim2.new(v, 0, 0.5, 0)
 
+    local api = { Hue = h, Sat = s, Val = v }
+
     local function fire()
         local col = Color3.fromHSV(h, s, v)
         swatch.BackgroundColor3 = col
         sGrad.Color = ColorSequence.new(Color3.fromHSV(h, 0, v), Color3.fromHSV(h, 1, v))
         vGrad.Color = ColorSequence.new(Color3.fromHSV(h, s, 0), Color3.fromHSV(h, s, 1))
+        api.Hue = h; api.Sat = s; api.Val = v
         if cfg.Function then pcall(cfg.Function, h, s, v) end
         if lib.SavedObjects[eName] then
             lib.SavedObjects[eName].SaveValue = { h = h, s = s, v = v }
@@ -1011,19 +957,22 @@ function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
             or i.UserInputType == Enum.UserInputType.Touch then
                 dragging = true
                 if bar.AbsoluteSize.X > 0 then
-                    local pct = math.clamp((i.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-                    knob.Position = UDim2.new(pct, 0, 0.5, 0)
-                    setter(pct); fire()
+                    setter(math.clamp((i.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1))
+                    knob.Position = UDim2.new(math.clamp((i.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1), 0, 0.5, 0)
+                    fire()
                 end
             end
         end)
         UserInputService.InputChanged:Connect(function(i)
-            if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement
-                          or i.UserInputType == Enum.UserInputType.Touch) then
+            if dragging and (
+                i.UserInputType == Enum.UserInputType.MouseMovement
+             or i.UserInputType == Enum.UserInputType.Touch
+            ) then
                 if bar.AbsoluteSize.X > 0 then
-                    local pct = math.clamp((i.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-                    knob.Position = UDim2.new(pct, 0, 0.5, 0)
-                    setter(pct); fire()
+                    local p = math.clamp((i.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+                    setter(p)
+                    knob.Position = UDim2.new(p, 0, 0.5, 0)
+                    fire()
                 end
             end
         end)
@@ -1039,7 +988,6 @@ function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
     barDrag(sHit, sBar, sKnob, function(p) s = p end)
     barDrag(vHit, vBar, vKnob, function(p) v = p end)
 
-    local api = { Hue = h, Sat = s, Val = v }
     lib.SavedObjects[eName] = {
         SaveValue = { h = h, s = s, v = v },
         Load = function(d)
@@ -1047,7 +995,6 @@ function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
             h = math.clamp(d.h or 0, 0, 1)
             s = math.clamp(d.s or 0, 0, 1)
             v = math.clamp(d.v or 0, 0, 1)
-            api.Hue = h; api.Sat = s; api.Val = v
             hKnob.Position = UDim2.new(h, 0, 0.5, 0)
             sKnob.Position = UDim2.new(s, 0, 0.5, 0)
             vKnob.Position = UDim2.new(v, 0, 0.5, 0)
@@ -1057,18 +1004,18 @@ function W.colorSlider(lib, parent, layoutOrder, accentObjs, cfg)
     return api
 end
 
-function W.keybind(lib, parent, layoutOrder, accentObjs, cfg)
+function W.keybind(lib, parent, order, accentList, cfg)
     cfg = cfg or {}
     local eName     = cfg.Name    or "Keybind"
     local key       = cfg.Default or Enum.KeyCode.Unknown
     local capturing = false
 
     local row = Instance.new("Frame")
-    row.Size                   = UDim2.new(1, 0, 0, 34)
+    row.Size                   = UDim2.new(1, 0, 0, 36)
     row.BackgroundColor3       = lib.Theme.Elevated
-    row.BackgroundTransparency = 0.3
+    row.BackgroundTransparency = 0.4
     row.BorderSizePixel        = 0
-    row.LayoutOrder            = layoutOrder
+    row.LayoutOrder            = order
     row.Parent                 = parent
     corner(row, 6)
 
@@ -1084,7 +1031,7 @@ function W.keybind(lib, parent, layoutOrder, accentObjs, cfg)
     nameLbl.Parent                 = row
 
     local keyBtn = Instance.new("TextButton")
-    keyBtn.Size             = UDim2.new(0, 76, 0, 21)
+    keyBtn.Size             = UDim2.new(0, 80, 0, 22)
     keyBtn.AnchorPoint      = Vector2.new(1, 0.5)
     keyBtn.Position         = UDim2.new(1, -10, 0.5, 0)
     keyBtn.BackgroundColor3 = lib.Theme.Background
@@ -1106,7 +1053,6 @@ function W.keybind(lib, parent, layoutOrder, accentObjs, cfg)
         keyBtn.Text       = "..."
         keyBtn.TextColor3 = lib.Theme.Accent
     end)
-
     keyBtn.MouseButton2Click:Connect(function()
         if capturing then
             capturing         = false
@@ -1114,7 +1060,6 @@ function W.keybind(lib, parent, layoutOrder, accentObjs, cfg)
             keyBtn.TextColor3 = lib.Theme.SubText
         end
     end)
-
     UserInputService.InputBegan:Connect(function(input, gp)
         if not gp and capturing and input.UserInputType == Enum.UserInputType.Keyboard then
             key               = input.KeyCode
@@ -1131,7 +1076,7 @@ function W.keybind(lib, parent, layoutOrder, accentObjs, cfg)
         SaveValue = key.Name,
         Load = function(v)
             local ok, k = pcall(function() return Enum.KeyCode[v] end)
-            if ok and k then key = k; api.Key = k; keyBtn.Text = v end
+            if ok and k then key = k; api.Key = k; keyBtn.Text = k.Name end
         end,
     }
     return api
@@ -1144,40 +1089,35 @@ function Fihware.new()
     local self = setmetatable({}, Fihware)
 
     self.Theme = {
-        Accent       = Color3.fromRGB(80, 155, 255),
-        AccentDark   = Color3.fromRGB(50, 110, 200),
-        AccentText   = Color3.fromRGB(255, 255, 255),
-        Background   = Color3.fromRGB(13, 12, 14),
-        Surface      = Color3.fromRGB(18, 17, 19),
-        Elevated     = Color3.fromRGB(23, 22, 24),
-        ElevatedHvr  = Color3.fromRGB(31, 30, 32),
-        Border       = Color3.fromRGB(34, 33, 35),
-        BorderLight  = Color3.fromRGB(48, 47, 49),
-        Text         = Color3.fromRGB(208, 208, 210),
-        TextBright   = Color3.fromRGB(238, 238, 240),
-        SubText      = Color3.fromRGB(140, 140, 144),
-        Muted        = Color3.fromRGB(88, 88, 92),
-        Success      = Color3.fromRGB(70, 200, 130),
-        Warning      = Color3.fromRGB(240, 170, 60),
-        Error        = Color3.fromRGB(235, 80, 80),
-        Discord      = Color3.fromRGB(88, 101, 242),
+        Accent      = Color3.fromRGB(80, 155, 255),
+        AccentDark  = Color3.fromRGB(50, 110, 200),
+        Background  = Color3.fromRGB(13, 12, 14),
+        Surface     = Color3.fromRGB(18, 17, 19),
+        Elevated    = Color3.fromRGB(23, 22, 24),
+        ElevatedHvr = Color3.fromRGB(31, 30, 32),
+        Border      = Color3.fromRGB(34, 33, 35),
+        BorderLight = Color3.fromRGB(50, 49, 51),
+        Text        = Color3.fromRGB(200, 200, 202),
+        TextBright  = Color3.fromRGB(235, 235, 237),
+        SubText     = Color3.fromRGB(130, 130, 134),
+        Muted       = Color3.fromRGB(80, 80, 84),
+        Success     = Color3.fromRGB(70, 200, 130),
+        Warning     = Color3.fromRGB(240, 170, 60),
+        Error       = Color3.fromRGB(235, 80, 80),
+        Discord     = Color3.fromRGB(88, 101, 242),
     }
 
-    self.SavedObjects   = {}
-    self.Windows        = {}
-    self.WindowGap      = 10
-    self.WindowWidth    = 240
-    self.MainNavWidth   = 245
-    self.Connections    = {}
-    self.MainGui        = nil
-    self.MainBlur       = nil
-    self.MainScale      = nil
-    self.ScaleRoot      = nil
-    self.LogoPill       = nil
-    self.NotifHolder    = nil
-    self.MainNavRef     = nil
-    self.SettingsWindow = nil
-    self.Initialized    = false
+    self.SavedObjects = {}
+    self.Windows      = {}
+    self.Connections  = {}
+    self.MainGui      = nil
+    self.MainBlur     = nil
+    self.MainScale    = nil
+    self.ScaleRoot    = nil
+    self.NotifHolder  = nil
+    self.MainNavRef   = nil
+    self.SettingsWin  = nil
+    self.Initialized  = false
 
     self.RainbowEnabled = false
     self.RainbowHue     = 0.58
@@ -1189,23 +1129,30 @@ function Fihware.new()
 
     self.NotificationsEnabled = true
     self.ToggleAlertsEnabled  = true
-    self.TooltipsEnabled      = true
     self.CurrentKeybind       = CONFIG.DEFAULT_KEY
     self.GuiVisible           = false
 
-    self.Icons = {}
+    self.WindowWidth   = 240
+    self.NavWidth      = 245
+    self.WindowGap     = 10
+
+    self.Icons  = {}
     for k, v in pairs(Icons) do self.Icons[k] = v end
 
     self.Config = CONFIG
+    self._mainAccentList = {}
 
     return self
 end
 
 -- ================================================================
--- PUBLIC API: ICONS, THEME, SAVE/LOAD, NOTIFY
+-- PUBLIC API
 -- ================================================================
+function Fihware:MakeIcon(parent, assetId, size, color, zindex)
+    return makeIcon(parent, assetId, size, color, zindex)
+end
+
 function Fihware:AddIcon(name, asset)
-    assert(type(name) == "string" and name ~= "", "AddIcon: name must be a non-empty string")
     local id = tostring(asset)
     if not id:match("^rbxassetid://") then
         id = "rbxassetid://" .. (id:match("%d+") or "0")
@@ -1214,46 +1161,26 @@ function Fihware:AddIcon(name, asset)
     return id
 end
 
-function Fihware:AddIcons(tbl)
-    for k, v in pairs(tbl) do self:AddIcon(k, v) end
-end
-
--- FIX #10: expose makeIcon as a public method so scripts can use it directly.
--- Returns holder (Frame) and img (ImageLabel) so callers can tween ImageColor3 etc.
-function Fihware:MakeIcon(parent, assetId, size, color)
-    return makeIcon(parent, assetId, size, color)
-end
-
 function Fihware:SetAccent(h, s, v)
     self.AccentH = h
     self.AccentS = s
     self.AccentV = v
     self.Theme.Accent     = Color3.fromHSV(h, s, v)
-    self.Theme.AccentDark = Color3.fromHSV(h, math.min(s + 0.1, 1), v * 0.78)
+    self.Theme.AccentDark = Color3.fromHSV(h, math.min(s + 0.08, 1), v * 0.75)
 
-    for _, obj in pairs(self.SavedObjects) do
-        if obj.UpdateAccent then pcall(obj.UpdateAccent, self.Theme.Accent) end
-    end
-
-    local function applyAccentList(list)
+    local function applyList(list)
         if not list then return end
-        for _, aobj in pairs(list) do
+        for _, entry in pairs(list) do
             pcall(function()
-                if aobj.type == "BackgroundColor3" then
-                    aobj.obj.BackgroundColor3 = self.Theme.Accent
-                elseif aobj.type == "TextColor3" then
-                    aobj.obj.TextColor3 = self.Theme.Accent
-                elseif aobj.type == "ImageColor3" then
-                    aobj.obj.ImageColor3 = self.Theme.Accent
-                elseif aobj.type == "ScrollBarImageColor3" then
-                    aobj.obj.ScrollBarImageColor3 = self.Theme.Accent
-                end
+                entry.obj[entry.prop] = self.Theme.Accent
             end)
         end
     end
 
-    for _, win in pairs(self.Windows) do applyAccentList(win._accentObjects) end
-    applyAccentList(self._mainAccent)
+    for _, win in pairs(self.Windows) do
+        applyList(win._accentList)
+    end
+    applyList(self._mainAccentList)
 end
 
 function Fihware:SaveSettings()
@@ -1263,8 +1190,7 @@ function Fihware:SaveSettings()
     end
     pcall(function()
         if not _isfolder("fihware") then _makefolder("fihware") end
-        _writefile("fihware/" .. tostring(game.PlaceId) .. ".json",
-            HttpService:JSONEncode(data))
+        _writefile("fihware/" .. tostring(game.PlaceId) .. ".json", HttpService:JSONEncode(data))
     end)
 end
 
@@ -1287,17 +1213,16 @@ function Fihware:Notify(title, body, duration, accentColor)
     accentColor = accentColor or self.Theme.Accent
 
     local notif = Instance.new("Frame")
-    notif.Name                   = "Notification"
-    notif.Size                   = UDim2.new(1, 0, 0, 58)
+    notif.Size                   = UDim2.new(1, 0, 0, 60)
     notif.BackgroundColor3       = self.Theme.Surface
-    notif.BorderSizePixel        = 0
     notif.BackgroundTransparency = 1
+    notif.BorderSizePixel        = 0
     notif.Parent                 = self.NotifHolder
     corner(notif, 7)
     stroke(notif, self.Theme.Border)
-    shadow(notif, 0.75)
+    shadow(notif)
 
-    tween(notif, { BackgroundTransparency = 0 }, 0.22)
+    tw(notif, { BackgroundTransparency = 0 }, 0.2)
 
     local inner = Instance.new("Frame")
     inner.Size                   = UDim2.new(1, 0, 1, 0)
@@ -1306,51 +1231,46 @@ function Fihware:Notify(title, body, duration, accentColor)
     pad(inner, 10, 12, 10, 12)
     listLayout(inner, 3)
 
-    local titleLbl = Instance.new("TextLabel")
-    titleLbl.Size                   = UDim2.new(1, 0, 0, 17)
-    titleLbl.BackgroundTransparency = 1
-    titleLbl.Text                   = title
-    titleLbl.TextSize               = 13
-    titleLbl.Font                   = Enum.Font.GothamBold
-    titleLbl.TextColor3             = self.Theme.TextBright
-    titleLbl.TextXAlignment         = Enum.TextXAlignment.Left
-    titleLbl.LayoutOrder            = 1
-    titleLbl.Parent                 = inner
+    local t = Instance.new("TextLabel")
+    t.Size                   = UDim2.new(1, 0, 0, 17)
+    t.BackgroundTransparency = 1
+    t.Text                   = title or ""
+    t.TextSize               = 13
+    t.Font                   = Enum.Font.GothamBold
+    t.TextColor3             = self.Theme.TextBright
+    t.TextXAlignment         = Enum.TextXAlignment.Left
+    t.LayoutOrder            = 1
+    t.Parent                 = inner
 
-    local bodyLbl = Instance.new("TextLabel")
-    bodyLbl.Size                   = UDim2.new(1, 0, 0, 14)
-    bodyLbl.BackgroundTransparency = 1
-    bodyLbl.Text                   = body or ""
-    bodyLbl.TextSize               = 11
-    bodyLbl.Font                   = Enum.Font.Gotham
-    bodyLbl.TextColor3             = self.Theme.SubText
-    bodyLbl.TextXAlignment         = Enum.TextXAlignment.Left
-    bodyLbl.TextWrapped            = true
-    bodyLbl.LayoutOrder            = 2
-    bodyLbl.Parent                 = inner
+    local b = Instance.new("TextLabel")
+    b.Size                   = UDim2.new(1, 0, 0, 14)
+    b.BackgroundTransparency = 1
+    b.Text                   = body or ""
+    b.TextSize               = 11
+    b.Font                   = Enum.Font.Gotham
+    b.TextColor3             = self.Theme.SubText
+    b.TextXAlignment         = Enum.TextXAlignment.Left
+    b.TextWrapped            = true
+    b.LayoutOrder            = 2
+    b.Parent                 = inner
 
-    local progBG = Instance.new("Frame")
-    progBG.Size             = UDim2.new(1, 0, 0, 2)
-    progBG.AnchorPoint      = Vector2.new(0, 1)
-    progBG.Position         = UDim2.new(0, 0, 1, 0)
-    progBG.BackgroundColor3 = self.Theme.Border
-    progBG.BorderSizePixel  = 0
-    progBG.Parent           = notif
-
-    local prog = Instance.new("Frame")
-    prog.Size             = UDim2.new(1, 0, 1, 0)
-    prog.BackgroundColor3 = accentColor
-    prog.BorderSizePixel  = 0
-    prog.Parent           = progBG
-    corner(prog, 99)
-
-    tween(prog, { Size = UDim2.new(0, 0, 1, 0) }, duration, Enum.EasingStyle.Linear)
+    local bar = Instance.new("Frame")
+    bar.Size             = UDim2.new(1, 0, 0, 2)
+    bar.AnchorPoint      = Vector2.new(0, 1)
+    bar.Position         = UDim2.new(0, 0, 1, 0)
+    bar.BackgroundColor3 = accentColor
+    bar.BorderSizePixel  = 0
+    bar.Parent           = notif
+    corner(bar, 99)
+    TweenService:Create(bar, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
+        Size = UDim2.new(0, 0, 0, 2)
+    }):Play()
 
     task.delay(duration, function()
         if not notif or not notif.Parent then return end
-        tween(notif,    { BackgroundTransparency = 1 }, 0.25)
-        tween(titleLbl, { TextTransparency       = 1 }, 0.25)
-        tween(bodyLbl,  { TextTransparency       = 1 }, 0.25)
+        tw(notif, { BackgroundTransparency = 1 }, 0.25)
+        tw(t,     { TextTransparency       = 1 }, 0.25)
+        tw(b,     { TextTransparency       = 1 }, 0.25)
         task.wait(0.3)
         if notif and notif.Parent then notif:Destroy() end
     end)
@@ -1376,6 +1296,7 @@ function Fihware:_init()
     if not ok then sg.Parent = LocalPlayer:WaitForChild("PlayerGui") end
     self.MainGui = sg
 
+    -- Scale root
     local root = Instance.new("Frame")
     root.Name                   = "ScaleRoot"
     root.Size                   = UDim2.new(1, 0, 1, 0)
@@ -1392,14 +1313,13 @@ function Fihware:_init()
     table.insert(self.Connections,
         Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
             uiScale.Scale = math.clamp(Camera.ViewportSize.X / 1920, 0.55, 1)
-        end))
+        end)
+    )
 
-    local PILL_W = self.MainNavWidth
-    local PILL_H = 48
-
+    -- Collapsed pill (shown when menu is hidden)
     local pill = Instance.new("Frame")
     pill.Name             = "LogoPill"
-    pill.Size             = UDim2.new(0, PILL_W, 0, PILL_H)
+    pill.Size             = UDim2.new(0, self.NavWidth, 0, 46)
     pill.Position         = UDim2.new(0, 8, 0, 8)
     pill.BackgroundColor3 = self.Theme.Elevated
     pill.BorderSizePixel  = 0
@@ -1407,10 +1327,10 @@ function Fihware:_init()
     pill.Parent           = sg
     corner(pill, 8)
     stroke(pill, self.Theme.Border)
-    shadow(pill, 0.78)
+    shadow(pill)
 
     local pillLogo = Instance.new("ImageLabel")
-    pillLogo.Size                   = UDim2.new(1, -60, 0, 30)
+    pillLogo.Size                   = UDim2.new(1, -60, 0, 28)
     pillLogo.AnchorPoint            = Vector2.new(0, 0.5)
     pillLogo.Position               = UDim2.new(0, 12, 0.5, 0)
     pillLogo.BackgroundTransparency = 1
@@ -1425,22 +1345,19 @@ function Fihware:_init()
     pillBtn.Text                   = ""
     pillBtn.AutoButtonColor        = false
     pillBtn.Parent                 = pill
-
-    pillBtn.MouseEnter:Connect(function()
-        tween(pill, { BackgroundColor3 = self.Theme.ElevatedHvr }, 0.12)
-    end)
-    pillBtn.MouseLeave:Connect(function()
-        tween(pill, { BackgroundColor3 = self.Theme.Elevated }, 0.12)
-    end)
+    pillBtn.MouseEnter:Connect(function() tw(pill, { BackgroundColor3 = self.Theme.ElevatedHvr }, 0.12) end)
+    pillBtn.MouseLeave:Connect(function() tw(pill, { BackgroundColor3 = self.Theme.Elevated },    0.12) end)
     pillBtn.MouseButton1Click:Connect(function() self:Toggle() end)
 
-    self.LogoPill = { Frame = pill }
+    self._pillFrame = pill
 
+    -- Blur
     local blur = Instance.new("BlurEffect")
     blur.Size   = 0
     blur.Parent = Lighting
     self.MainBlur = blur
 
+    -- Notification holder
     local nh = Instance.new("Frame")
     nh.Name                   = "NotifHolder"
     nh.Size                   = UDim2.new(0, 290, 0, 520)
@@ -1452,12 +1369,14 @@ function Fihware:_init()
     nhList.VerticalAlignment = Enum.VerticalAlignment.Bottom
     self.NotifHolder = nh
 
+    -- Auto-save
     task.spawn(function()
         while task.wait(30) do
             if self.Initialized then self:SaveSettings() end
         end
     end)
 
+    -- Rainbow loop
     task.spawn(function()
         while task.wait(0.03) do
             if self.RainbowEnabled and self.Initialized then
@@ -1468,12 +1387,19 @@ function Fihware:_init()
     end)
 end
 
+function Fihware:SetVisible(val)
+    self.GuiVisible = val
+    if self.ScaleRoot   then self.ScaleRoot.Visible  = val end
+    if self._pillFrame  then self._pillFrame.Visible  = not val end
+    if self.MainBlur    then tw(self.MainBlur, { Size = val and 8 or 0 }, 0.25) end
+end
+
+function Fihware:Toggle() self:SetVisible(not self.GuiVisible) end
+
 function Fihware:Destroy()
     self:SaveSettings()
-    for _, con in pairs(self.Connections) do
-        pcall(function() con:Disconnect() end)
-    end
-    if self.MainGui  then self.MainGui:Destroy() end
+    for _, c in pairs(self.Connections) do pcall(function() c:Disconnect() end) end
+    if self.MainGui  then self.MainGui:Destroy()  end
     if self.MainBlur then self.MainBlur:Destroy() end
     self.Windows      = {}
     self.SavedObjects = {}
@@ -1481,41 +1407,32 @@ function Fihware:Destroy()
     self.Initialized  = false
 end
 
-function Fihware:SetVisible(val)
-    self.GuiVisible = val
-    if self.ScaleRoot then self.ScaleRoot.Visible = val end
-    if self.LogoPill then self.LogoPill.Frame.Visible = not val end
-    if self.MainBlur then tween(self.MainBlur, { Size = val and 8 or 0 }, 0.25) end
-end
-
-function Fihware:Toggle() self:SetVisible(not self.GuiVisible) end
-
 -- ================================================================
 -- WINDOW LAYOUT
 -- ================================================================
 function Fihware:SortWindows()
     if not self.MainNavRef then return end
 
-    local navPos  = self.MainNavRef.Position
-    local navSize = self.MainNavRef.Size
-    local nx      = navPos.X.Offset + navSize.X.Offset + self.WindowGap
-    local ny      = navPos.Y.Offset
+    -- Wait one frame so AbsolutePosition is valid
+    task.defer(function()
+        local navPos  = self.MainNavRef.AbsolutePosition
+        local navSize = self.MainNavRef.AbsoluteSize
+        local nx      = navPos.X + navSize.X + self.WindowGap
+        local ny      = navPos.Y
+        local tweenInfo = TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 
-    local tweenInfo = TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-
-    for _, w in ipairs(self.Windows) do
-        if w._wantsVisible then
-            local targetPos = UDim2.new(0, nx, 0, ny)
-            if w.Frame.Visible then
+        for _, w in ipairs(self.Windows) do
+            if w._wantsVisible then
+                local targetPos = UDim2.new(0, nx, 0, ny)
+                if not w.Frame.Visible then
+                    w.Frame.Position = UDim2.new(0, nx + 18, 0, ny)
+                    w.Frame.Visible  = true
+                end
                 TweenService:Create(w.Frame, tweenInfo, { Position = targetPos }):Play()
-            else
-                w.Frame.Position = UDim2.new(0, nx + 20, 0, ny)
-                w.Frame.Visible  = true
-                TweenService:Create(w.Frame, tweenInfo, { Position = targetPos }):Play()
+                nx = nx + w.Frame.AbsoluteSize.X + self.WindowGap
             end
-            nx = nx + w.Frame.Size.X.Offset + self.WindowGap
         end
-    end
+    end)
 end
 
 -- ================================================================
@@ -1526,31 +1443,28 @@ function Fihware:CreateMainWindow(config)
     self:_init()
 
     local lib        = self
-    local position   = config.Position  or UDim2.new(0, 8, 0, 8)
     local maxH       = config.MaxHeight or 580
     local elemCount  = 0
-    local accentObjs = {}
-    lib._mainAccent  = accentObjs
+    local accentList = lib._mainAccentList
 
     local HEADER_H = 48
     local FOOTER_H = 56
 
     local nav = Instance.new("Frame")
     nav.Name             = "MainWindow"
-    nav.Size             = UDim2.new(0, lib.MainNavWidth, 0, HEADER_H + FOOTER_H)
-    nav.Position         = position
+    nav.Size             = UDim2.new(0, lib.NavWidth, 0, HEADER_H + FOOTER_H)
+    nav.Position         = config.Position or UDim2.new(0, 8, 0, 8)
     nav.BackgroundColor3 = lib.Theme.Surface
     nav.BorderSizePixel  = 0
     nav.ClipsDescendants = false
     nav.Parent           = lib.ScaleRoot
     corner(nav, 8)
     stroke(nav, lib.Theme.Border)
-    shadow(nav, 0.72)
+    shadow(nav)
     lib.MainNavRef = nav
 
-    -- HEADER
+    -- ── Header ──────────────────────────────────────────────────
     local header = Instance.new("Frame")
-    header.Name             = "Header"
     header.Size             = UDim2.new(1, 0, 0, HEADER_H)
     header.BackgroundColor3 = lib.Theme.Elevated
     header.BorderSizePixel  = 0
@@ -1558,87 +1472,74 @@ function Fihware:CreateMainWindow(config)
     header.Parent           = nav
     corner(header, 8)
 
-    local headerCover = Instance.new("Frame")
-    headerCover.Size             = UDim2.new(1, 0, 0, 10)
-    headerCover.Position         = UDim2.new(0, 0, 1, -10)
-    headerCover.BackgroundColor3 = lib.Theme.Elevated
-    headerCover.BorderSizePixel  = 0
-    headerCover.Parent           = header
+    -- Square off the bottom corners of header
+    local hCover = Instance.new("Frame")
+    hCover.Size             = UDim2.new(1, 0, 0, 10)
+    hCover.Position         = UDim2.new(0, 0, 1, -10)
+    hCover.BackgroundColor3 = lib.Theme.Elevated
+    hCover.BorderSizePixel  = 0
+    hCover.Parent           = header
 
-    local headerDivider = Instance.new("Frame")
-    headerDivider.Size             = UDim2.new(1, 0, 0, 1)
-    headerDivider.Position         = UDim2.new(0, 0, 1, 0)
-    headerDivider.BackgroundColor3 = lib.Theme.Border
-    headerDivider.BorderSizePixel  = 0
-    headerDivider.ZIndex           = 3
-    headerDivider.Parent           = header
+    local hDiv = Instance.new("Frame")
+    hDiv.Size             = UDim2.new(1, 0, 0, 1)
+    hDiv.Position         = UDim2.new(0, 0, 1, 0)
+    hDiv.BackgroundColor3 = lib.Theme.Border
+    hDiv.BorderSizePixel  = 0
+    hDiv.ZIndex           = 3
+    hDiv.Parent           = header
 
-    local logoImg = Instance.new("ImageLabel")
-    logoImg.Name                   = "Logo"
-    logoImg.Size                   = UDim2.new(1, -60, 0, 30)
-    logoImg.AnchorPoint            = Vector2.new(0, 0.5)
-    logoImg.Position               = UDim2.new(0, 12, 0.5, 0)
-    logoImg.BackgroundTransparency = 1
-    logoImg.Image                  = CONFIG.LOGO_ID
-    logoImg.ScaleType              = Enum.ScaleType.Fit
-    logoImg.ImageColor3            = Color3.new(1, 1, 1)
-    logoImg.ZIndex                 = 3
-    logoImg.Parent                 = header
+    local logo = Instance.new("ImageLabel")
+    logo.Size                   = UDim2.new(1, -52, 0, 28)
+    logo.AnchorPoint            = Vector2.new(0, 0.5)
+    logo.Position               = UDim2.new(0, 12, 0.5, 0)
+    logo.BackgroundTransparency = 1
+    logo.Image                  = CONFIG.LOGO_ID
+    logo.ScaleType              = Enum.ScaleType.Fit
+    logo.ImageColor3            = Color3.new(1, 1, 1)
+    logo.ZIndex                 = 3
+    logo.Parent                 = header
 
-    -- ── Discord button ───────────────────────────────────────────
-    local discordFrame = Instance.new("Frame")
-    discordFrame.Size             = UDim2.new(0, 28, 0, 22)
-    discordFrame.AnchorPoint      = Vector2.new(1, 0.5)
-    discordFrame.Position         = UDim2.new(1, -10, 0.5, 0)
-    discordFrame.BackgroundColor3 = lib.Theme.Background
-    discordFrame.BorderSizePixel  = 0
-    discordFrame.ZIndex           = 3
-    discordFrame.Parent           = header
-    corner(discordFrame, 5)
-    stroke(discordFrame, lib.Theme.Border)
+    -- Discord button
+    local dcFrame = Instance.new("Frame")
+    dcFrame.Size             = UDim2.new(0, 28, 0, 22)
+    dcFrame.AnchorPoint      = Vector2.new(1, 0.5)
+    dcFrame.Position         = UDim2.new(1, -10, 0.5, 0)
+    dcFrame.BackgroundColor3 = lib.Theme.Background
+    dcFrame.BorderSizePixel  = 0
+    dcFrame.ZIndex           = 3
+    dcFrame.Parent           = header
+    corner(dcFrame, 5)
+    stroke(dcFrame, lib.Theme.Border)
 
-    local discordIcon = Instance.new("ImageLabel")
-    discordIcon.Size                   = UDim2.new(0, 14, 0, 14)
-    discordIcon.AnchorPoint            = Vector2.new(0.5, 0.5)
-    discordIcon.Position               = UDim2.new(0.5, 0, 0.5, 0)
-    discordIcon.BackgroundTransparency = 1
-    discordIcon.Image                  = CONFIG.DISCORD_ICON_ID
-    discordIcon.ImageColor3            = lib.Theme.Text   -- FIX #2
-    discordIcon.ScaleType              = Enum.ScaleType.Fit
-    discordIcon.ZIndex                 = 4
-    discordIcon.Parent                 = discordFrame
+    local dcIcon = makeIcon(dcFrame, CONFIG.DISCORD_ICON_ID, 14, lib.Theme.Text, 4)
 
-    local discordBtn = Instance.new("TextButton")
-    discordBtn.Size                   = UDim2.new(1, 0, 1, 0)
-    discordBtn.BackgroundTransparency = 1
-    discordBtn.Text                   = ""
-    discordBtn.AutoButtonColor        = false
-    discordBtn.ZIndex                 = 5
-    discordBtn.Parent                 = discordFrame
+    local dcBtn = Instance.new("TextButton")
+    dcBtn.Size                   = UDim2.new(1, 0, 1, 0)
+    dcBtn.BackgroundTransparency = 1
+    dcBtn.Text                   = ""
+    dcBtn.AutoButtonColor        = false
+    dcBtn.ZIndex                 = 5
+    dcBtn.Parent                 = dcFrame
 
-    discordBtn.MouseEnter:Connect(function()
-        tween(discordFrame, { BackgroundColor3 = lib.Theme.Discord }, 0.12)
-        tween(discordIcon, { ImageColor3 = Color3.new(1, 1, 1) }, 0.12)
+    dcBtn.MouseEnter:Connect(function()
+        tw(dcFrame, { BackgroundColor3 = lib.Theme.Discord  }, 0.12)
+        tw(dcIcon,  { ImageColor3      = Color3.new(1,1,1) }, 0.12)
     end)
-    discordBtn.MouseLeave:Connect(function()
-        tween(discordFrame, { BackgroundColor3 = lib.Theme.Background }, 0.12)
-        tween(discordIcon, { ImageColor3 = lib.Theme.Text }, 0.12)  -- FIX #3
+    dcBtn.MouseLeave:Connect(function()
+        tw(dcFrame, { BackgroundColor3 = lib.Theme.Background }, 0.12)
+        tw(dcIcon,  { ImageColor3      = lib.Theme.Text       }, 0.12)
     end)
-    discordBtn.MouseButton1Click:Connect(function()
+    dcBtn.MouseButton1Click:Connect(function()
         local ok = pcall(_setclipboard, lib.Config.DISCORD_COPY)
-        if ok then
-            lib:Notify("Discord", "Copied: " .. lib.Config.DISCORD_COPY, 2.5, lib.Theme.Discord)
-        else
-            lib:Notify("Discord", "Clipboard unavailable in this executor", 3, lib.Theme.Warning)
-        end
-        tween(discordFrame, { Size = UDim2.new(0, 26, 0, 20) }, 0.06)
+        lib:Notify("Discord", ok and ("Copied: " .. lib.Config.DISCORD_COPY) or "Clipboard unavailable", 2.5,
+            ok and lib.Theme.Discord or lib.Theme.Warning)
+        tw(dcFrame, { Size = UDim2.new(0, 26, 0, 20) }, 0.06)
         task.wait(0.07)
-        tween(discordFrame, { Size = UDim2.new(0, 28, 0, 22) }, 0.12)
+        tw(dcFrame, { Size = UDim2.new(0, 28, 0, 22) }, 0.12)
     end)
 
-    -- FOOTER
+    -- ── Footer ──────────────────────────────────────────────────
     local footer = Instance.new("Frame")
-    footer.Name             = "Footer"
     footer.Size             = UDim2.new(1, 0, 0, FOOTER_H)
     footer.AnchorPoint      = Vector2.new(0, 1)
     footer.Position         = UDim2.new(0, 0, 1, 0)
@@ -1648,20 +1549,18 @@ function Fihware:CreateMainWindow(config)
     footer.Parent           = nav
     corner(footer, 8)
 
-    local footerCover = Instance.new("Frame")
-    footerCover.Size             = UDim2.new(1, 0, 0, 10)
-    footerCover.Position         = UDim2.new(0, 0, 0, 0)
-    footerCover.BackgroundColor3 = lib.Theme.Elevated
-    footerCover.BorderSizePixel  = 0
-    footerCover.Parent           = footer
+    local fCover = Instance.new("Frame")
+    fCover.Size             = UDim2.new(1, 0, 0, 10)
+    fCover.BackgroundColor3 = lib.Theme.Elevated
+    fCover.BorderSizePixel  = 0
+    fCover.Parent           = footer
 
-    local footerDivider = Instance.new("Frame")
-    footerDivider.Size             = UDim2.new(1, 0, 0, 1)
-    footerDivider.Position         = UDim2.new(0, 0, 0, 0)
-    footerDivider.BackgroundColor3 = lib.Theme.Border
-    footerDivider.BorderSizePixel  = 0
-    footerDivider.ZIndex           = 3
-    footerDivider.Parent           = footer
+    local fDiv = Instance.new("Frame")
+    fDiv.Size             = UDim2.new(1, 0, 0, 1)
+    fDiv.BackgroundColor3 = lib.Theme.Border
+    fDiv.BorderSizePixel  = 0
+    fDiv.ZIndex           = 3
+    fDiv.Parent           = footer
 
     local pfp = Instance.new("ImageLabel")
     pfp.Size             = UDim2.new(0, 36, 0, 36)
@@ -1675,33 +1574,33 @@ function Fihware:CreateMainWindow(config)
     corner(pfp, 99)
     stroke(pfp, lib.Theme.Border)
 
-    local statusDot = Instance.new("Frame")
-    statusDot.Size             = UDim2.new(0, 10, 0, 10)
-    statusDot.AnchorPoint      = Vector2.new(1, 1)
-    statusDot.Position         = UDim2.new(1, 1, 1, 1)
-    statusDot.BackgroundColor3 = lib.Theme.Success
-    statusDot.BorderSizePixel  = 0
-    statusDot.ZIndex           = 4
-    statusDot.Parent           = pfp
-    corner(statusDot, 99)
-    stroke(statusDot, lib.Theme.Elevated, 2)
+    local dot = Instance.new("Frame")
+    dot.Size             = UDim2.new(0, 10, 0, 10)
+    dot.AnchorPoint      = Vector2.new(1, 1)
+    dot.Position         = UDim2.new(1, 1, 1, 1)
+    dot.BackgroundColor3 = lib.Theme.Success
+    dot.BorderSizePixel  = 0
+    dot.ZIndex           = 4
+    dot.Parent           = pfp
+    corner(dot, 99)
+    stroke(dot, lib.Theme.Elevated, 2)
 
-    local nameLbl = Instance.new("TextLabel")
-    nameLbl.Size                   = UDim2.new(1, -92, 0, 17)
-    nameLbl.Position               = UDim2.new(0, 54, 0.5, -16)
-    nameLbl.BackgroundTransparency = 1
-    nameLbl.Text                   = LocalPlayer.DisplayName
-    nameLbl.TextSize               = 13
-    nameLbl.Font                   = Enum.Font.GothamBold
-    nameLbl.TextColor3             = lib.Theme.TextBright
-    nameLbl.TextXAlignment         = Enum.TextXAlignment.Left
-    nameLbl.TextTruncate           = Enum.TextTruncate.AtEnd
-    nameLbl.ZIndex                 = 3
-    nameLbl.Parent                 = footer
+    local dispLbl = Instance.new("TextLabel")
+    dispLbl.Size                   = UDim2.new(1, -92, 0, 16)
+    dispLbl.Position               = UDim2.new(0, 54, 0.5, -16)
+    dispLbl.BackgroundTransparency = 1
+    dispLbl.Text                   = LocalPlayer.DisplayName
+    dispLbl.TextSize               = 13
+    dispLbl.Font                   = Enum.Font.GothamBold
+    dispLbl.TextColor3             = lib.Theme.TextBright
+    dispLbl.TextXAlignment         = Enum.TextXAlignment.Left
+    dispLbl.TextTruncate           = Enum.TextTruncate.AtEnd
+    dispLbl.ZIndex                 = 3
+    dispLbl.Parent                 = footer
 
     local userLbl = Instance.new("TextLabel")
     userLbl.Size                   = UDim2.new(1, -92, 0, 14)
-    userLbl.Position               = UDim2.new(0, 54, 0.5, 1)
+    userLbl.Position               = UDim2.new(0, 54, 0.5, 2)
     userLbl.BackgroundTransparency = 1
     userLbl.Text                   = "@" .. LocalPlayer.Name
     userLbl.TextSize               = 11
@@ -1712,7 +1611,7 @@ function Fihware:CreateMainWindow(config)
     userLbl.ZIndex                 = 3
     userLbl.Parent                 = footer
 
-    -- ── Settings gear ────────────────────────────────────────────
+    -- Settings gear
     local gearFrame = Instance.new("Frame")
     gearFrame.Size             = UDim2.new(0, 28, 0, 28)
     gearFrame.AnchorPoint      = Vector2.new(1, 0.5)
@@ -1724,16 +1623,7 @@ function Fihware:CreateMainWindow(config)
     corner(gearFrame, 6)
     stroke(gearFrame, lib.Theme.Border)
 
-    local gearIcon = Instance.new("ImageLabel")
-    gearIcon.Size                   = UDim2.new(0, 14, 0, 14)
-    gearIcon.AnchorPoint            = Vector2.new(0.5, 0.5)
-    gearIcon.Position               = UDim2.new(0.5, 0, 0.5, 0)
-    gearIcon.BackgroundTransparency = 1
-    gearIcon.Image                  = Icons.Settings
-    gearIcon.ImageColor3            = lib.Theme.Text   -- FIX #4
-    gearIcon.ScaleType              = Enum.ScaleType.Fit
-    gearIcon.ZIndex                 = 4
-    gearIcon.Parent                 = gearFrame
+    local gearIcon = makeIcon(gearFrame, Icons.Settings, 14, lib.Theme.Text, 4)
 
     local gearBtn = Instance.new("TextButton")
     gearBtn.Size                   = UDim2.new(1, 0, 1, 0)
@@ -1744,23 +1634,23 @@ function Fihware:CreateMainWindow(config)
     gearBtn.Parent                 = gearFrame
 
     gearBtn.MouseEnter:Connect(function()
-        tween(gearFrame, { BackgroundColor3 = lib.Theme.Elevated }, 0.1)
-        tween(gearIcon,  { ImageColor3      = lib.Theme.Accent   }, 0.1)
+        tw(gearFrame, { BackgroundColor3 = lib.Theme.Elevated }, 0.1)
+        tw(gearIcon,  { ImageColor3      = lib.Theme.Accent   }, 0.1)
     end)
     gearBtn.MouseLeave:Connect(function()
-        tween(gearFrame, { BackgroundColor3 = lib.Theme.Background }, 0.1)
-        tween(gearIcon,  { ImageColor3      = lib.Theme.Text }, 0.1)  -- FIX #5
+        tw(gearFrame, { BackgroundColor3 = lib.Theme.Background }, 0.1)
+        tw(gearIcon,  { ImageColor3      = lib.Theme.Text        }, 0.1)
     end)
     gearBtn.MouseButton1Click:Connect(function()
-        tween(gearIcon, { Rotation = gearIcon.Rotation + 90 }, 0.22)
-        if lib.SettingsWindow then
-            lib.SettingsWindow:SetVisible(not lib.SettingsWindow:IsVisible())
+        tw(gearIcon, { Rotation = gearIcon.Rotation + 90 }, 0.22)
+        if lib.SettingsWin then
+            lib.SettingsWin:SetVisible(not lib.SettingsWin:IsVisible())
         end
     end)
 
+    -- ── Scroll content ──────────────────────────────────────────
     local scroll = Instance.new("ScrollingFrame")
-    scroll.Name                   = "Content"
-    scroll.Size                   = UDim2.new(1, 0, 1, -HEADER_H - FOOTER_H)
+    scroll.Size                   = UDim2.new(1, 0, 1, -(HEADER_H + FOOTER_H))
     scroll.Position               = UDim2.new(0, 0, 0, HEADER_H)
     scroll.BackgroundTransparency = 1
     scroll.BorderSizePixel        = 0
@@ -1769,33 +1659,35 @@ function Fihware:CreateMainWindow(config)
     scroll.CanvasSize             = UDim2.new(0, 0, 0, 0)
     scroll.ClipsDescendants       = true
     scroll.Parent                 = nav
-    table.insert(accentObjs, { obj = scroll, type = "ScrollBarImageColor3" })
+    table.insert(accentList, { obj = scroll, prop = "ScrollBarImageColor3" })
 
     local contentList = listLayout(scroll, 4)
     pad(scroll, 10, 10, 10, 10)
 
     local function refreshSize()
-        local ch     = contentList.AbsoluteContentSize.Y + 24
-        local totalH = math.min(ch + HEADER_H + FOOTER_H, maxH)
-        tween(nav, { Size = UDim2.new(0, lib.MainNavWidth, 0, totalH) }, 0.2)
+        local ch = contentList.AbsoluteContentSize.Y + 24
+        local targetH = math.min(ch + HEADER_H + FOOTER_H, maxH)
+        tw(nav, { Size = UDim2.new(0, lib.NavWidth, 0, targetH) }, 0.2)
         scroll.CanvasSize = UDim2.new(0, 0, 0, ch)
     end
     contentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(refreshSize)
 
-    local Main = { Frame = nav, _accentObjects = accentObjs }
+    -- Keybind listener
+    table.insert(lib.Connections,
+        UserInputService.InputBegan:Connect(function(input, gp)
+            if not gp and input.KeyCode == lib.CurrentKeybind then lib:Toggle() end
+        end)
+    )
 
-    table.insert(lib.Connections, UserInputService.InputBegan:Connect(function(input, gp)
-        if not gp and input.KeyCode == lib.CurrentKeybind then lib:Toggle() end
-    end))
-
-    function Main:GetFrame() return nav end
+    -- ── Main window API ─────────────────────────────────────────
+    local Main = { Frame = nav }
 
     function Main:AddWindowButton(name, window, icon)
         elemCount = elemCount + 1
         local active = false
 
         local btn = Instance.new("TextButton")
-        btn.Name                   = name .. "NavBtn"
+        btn.Name                   = name .. "Btn"
         btn.Size                   = UDim2.new(1, 0, 0, 36)
         btn.BackgroundColor3       = lib.Theme.Elevated
         btn.BackgroundTransparency = 1
@@ -1808,20 +1700,14 @@ function Fihware:CreateMainWindow(config)
 
         local iconImg
         if icon then
-            iconImg = Instance.new("ImageLabel")
-            iconImg.Size                   = UDim2.new(0, 16, 0, 16)
-            iconImg.AnchorPoint            = Vector2.new(0, 0.5)
-            iconImg.Position               = UDim2.new(0, 12, 0.5, 0)
-            iconImg.BackgroundTransparency = 1
-            iconImg.Image                  = icon
-            iconImg.ImageColor3            = lib.Theme.Text   -- FIX #6: was SubText (near-invisible)
-            iconImg.ScaleType              = Enum.ScaleType.Fit
-            iconImg.ZIndex                 = 2
-            iconImg.Parent                 = btn
+            iconImg = makeIcon(btn, icon, 16, lib.Theme.Text, 2)
+            -- Override the centered anchor to sit left-aligned
+            iconImg.AnchorPoint = Vector2.new(0, 0.5)
+            iconImg.Position    = UDim2.new(0, 12, 0.5, 0)
         end
 
         local nameLbl2 = Instance.new("TextLabel")
-        nameLbl2.Size                   = UDim2.new(1, -42, 1, 0)
+        nameLbl2.Size                   = UDim2.new(1, icon and -42 or -24, 1, 0)
         nameLbl2.Position               = UDim2.new(0, icon and 36 or 12, 0, 0)
         nameLbl2.BackgroundTransparency = 1
         nameLbl2.Text                   = name
@@ -1831,46 +1717,42 @@ function Fihware:CreateMainWindow(config)
         nameLbl2.TextXAlignment         = Enum.TextXAlignment.Left
         nameLbl2.Parent                 = btn
 
-        local stateDot = Instance.new("Frame")
-        stateDot.Size                   = UDim2.new(0, 5, 0, 5)
-        stateDot.AnchorPoint            = Vector2.new(1, 0.5)
-        stateDot.Position               = UDim2.new(1, -12, 0.5, 0)
-        stateDot.BackgroundColor3       = lib.Theme.Accent
-        stateDot.BackgroundTransparency = 1
-        stateDot.BorderSizePixel        = 0
-        stateDot.Parent                 = btn
-        corner(stateDot, 99)
-        table.insert(accentObjs, { obj = stateDot, type = "BackgroundColor3" })
+        local dot2 = Instance.new("Frame")
+        dot2.Size                   = UDim2.new(0, 5, 0, 5)
+        dot2.AnchorPoint            = Vector2.new(1, 0.5)
+        dot2.Position               = UDim2.new(1, -12, 0.5, 0)
+        dot2.BackgroundColor3       = lib.Theme.Accent
+        dot2.BackgroundTransparency = 1
+        dot2.BorderSizePixel        = 0
+        dot2.Parent                 = btn
+        corner(dot2, 99)
+        table.insert(accentList, { obj = dot2, prop = "BackgroundColor3" })
 
         local function setActive(v)
             active = v
             if window then window:SetVisible(v) end
-            tween(nameLbl2, { TextColor3 = v and lib.Theme.TextBright or lib.Theme.Text }, 0.18)
-            tween(stateDot, { BackgroundTransparency = v and 0 or 1 }, 0.18)
-            tween(btn, {
+            tw(nameLbl2, { TextColor3 = v and lib.Theme.TextBright or lib.Theme.Text }, 0.18)
+            tw(dot2, { BackgroundTransparency = v and 0 or 1 }, 0.18)
+            tw(btn, {
                 BackgroundTransparency = v and 0 or 1,
                 BackgroundColor3       = lib.Theme.Elevated,
             }, 0.18)
             if iconImg then
-                -- FIX #8: inactive state was SubText (near-invisible), now uses Text
-                tween(iconImg, { ImageColor3 = v and lib.Theme.Accent or lib.Theme.Text }, 0.18)
+                tw(iconImg, { ImageColor3 = v and lib.Theme.Accent or lib.Theme.Text }, 0.18)
             end
         end
 
         btn.MouseEnter:Connect(function()
-            if not active then
-                tween(btn,      { BackgroundTransparency = 0, BackgroundColor3 = lib.Theme.Elevated }, 0.1)
-                tween(nameLbl2, { TextColor3 = lib.Theme.Text }, 0.1)
-                if iconImg then tween(iconImg, { ImageColor3 = lib.Theme.TextBright }, 0.1) end
-            end
+            if active then return end
+            tw(btn,      { BackgroundTransparency = 0.1, BackgroundColor3 = lib.Theme.Elevated }, 0.1)
+            tw(nameLbl2, { TextColor3 = lib.Theme.Text }, 0.1)
+            if iconImg then tw(iconImg, { ImageColor3 = lib.Theme.TextBright }, 0.1) end
         end)
         btn.MouseLeave:Connect(function()
-            if not active then
-                tween(btn,      { BackgroundTransparency = 1 }, 0.1)
-                tween(nameLbl2, { TextColor3 = lib.Theme.SubText }, 0.1)
-                -- FIX #7: was SubText (near-invisible), now restores to Text
-                if iconImg then tween(iconImg, { ImageColor3 = lib.Theme.Text }, 0.1) end
-            end
+            if active then return end
+            tw(btn,      { BackgroundTransparency = 1 }, 0.1)
+            tw(nameLbl2, { TextColor3 = lib.Theme.SubText }, 0.1)
+            if iconImg then tw(iconImg, { ImageColor3 = lib.Theme.Text }, 0.1) end
         end)
         btn.MouseButton1Click:Connect(function() setActive(not active) end)
 
@@ -1881,108 +1763,83 @@ function Fihware:CreateMainWindow(config)
         }
     end
 
-    function Main:AddSection(name)
-        elemCount = elemCount + 1
-        return W.section(lib, scroll, elemCount, name)
-    end
+    function Main:AddSection(name)    elemCount += 1; return W.section(lib, scroll, elemCount, name) end
     Main.CreateSection = Main.AddSection
 
-    function Main:CreateLabel(cfg)
-        elemCount = elemCount + 1; return W.label(lib, scroll, elemCount, cfg)
-    end
-    function Main:CreateToggle(cfg)
-        elemCount = elemCount + 1; return W.toggle(lib, scroll, elemCount, accentObjs, cfg)
-    end
-    function Main:CreateSlider(cfg)
-        elemCount = elemCount + 1; return W.slider(lib, scroll, elemCount, accentObjs, cfg)
-    end
-    function Main:CreateDropdown(cfg)
-        elemCount = elemCount + 1; return W.dropdown(lib, scroll, elemCount, accentObjs, cfg)
-    end
-    function Main:CreateButton(cfg)
-        elemCount = elemCount + 1; return W.button(lib, scroll, elemCount, accentObjs, cfg)
-    end
-    function Main:CreateOutlineButton(cfg)
-        elemCount = elemCount + 1; return W.outlineButton(lib, scroll, elemCount, accentObjs, cfg)
-    end
-    function Main:CreateTextBox(cfg)
-        elemCount = elemCount + 1; return W.textbox(lib, scroll, elemCount, accentObjs, cfg)
-    end
-    function Main:CreateColorSlider(cfg)
-        elemCount = elemCount + 1; return W.colorSlider(lib, scroll, elemCount, accentObjs, cfg)
-    end
-    function Main:CreateKeybind(cfg)
-        elemCount = elemCount + 1; return W.keybind(lib, scroll, elemCount, accentObjs, cfg)
-    end
+    function Main:CreateLabel(cfg)         elemCount += 1; return W.label(lib, scroll, elemCount, cfg) end
+    function Main:CreateToggle(cfg)        elemCount += 1; return W.toggle(lib, scroll, elemCount, accentList, cfg) end
+    function Main:CreateSlider(cfg)        elemCount += 1; return W.slider(lib, scroll, elemCount, accentList, cfg) end
+    function Main:CreateDropdown(cfg)      elemCount += 1; return W.dropdown(lib, scroll, elemCount, accentList, cfg) end
+    function Main:CreateButton(cfg)        elemCount += 1; return W.button(lib, scroll, elemCount, accentList, cfg) end
+    function Main:CreateOutlineButton(cfg) elemCount += 1; return W.outlineButton(lib, scroll, elemCount, accentList, cfg) end
+    function Main:CreateTextBox(cfg)       elemCount += 1; return W.textbox(lib, scroll, elemCount, accentList, cfg) end
+    function Main:CreateColorSlider(cfg)   elemCount += 1; return W.colorSlider(lib, scroll, elemCount, accentList, cfg) end
+    function Main:CreateKeybind(cfg)       elemCount += 1; return W.keybind(lib, scroll, elemCount, accentList, cfg) end
 
     function Main:AddDefaultSettings()
-        if lib.SettingsWindow then return lib.SettingsWindow end
+        if lib.SettingsWin then return lib.SettingsWin end
 
-        local Settings = lib:CreateWindow({
-            Name      = "Settings",
-            Icon      = lib.Icons.Settings,
-            MaxHeight = 520,
-        })
-        lib.SettingsWindow = Settings
+        local S = lib:CreateWindow({ Name = "Settings", Icon = lib.Icons.Settings, MaxHeight = 520 })
+        lib.SettingsWin = S
 
-        Settings:CreateSection("APPEARANCE")
-        Settings:CreateColorSlider({
+        S:CreateSection("APPEARANCE")
+        S:CreateColorSlider({
             Name     = "Accent Color",
             DefaultH = lib.AccentH,
             DefaultS = lib.AccentS,
             DefaultV = lib.AccentV,
             Function = function(h, s, v) lib:SetAccent(h, s, v) end,
         })
-        Settings:CreateToggle({
-            Name     = "Rainbow",
+        S:CreateToggle({
+            Name     = "Rainbow Mode",
             Default  = false,
             Function = function(v) lib.RainbowEnabled = v end,
         })
-        Settings:CreateSlider({
+        S:CreateSlider({
             Name     = "Rainbow Speed",
             Min      = 1, Max = 100, Default = 10,
             Function = function(v) lib.RainbowSpeed = math.max((v / 10) - 0.4, 0.05) end,
         })
-        Settings:CreateToggle({
+        S:CreateToggle({
             Name     = "Blur Background",
             Default  = false,
             Function = function(v)
-                if lib.MainBlur then tween(lib.MainBlur, { Size = v and 8 or 0 }, 0.25) end
+                if lib.MainBlur then tw(lib.MainBlur, { Size = v and 8 or 0 }, 0.25) end
             end,
         })
 
-        Settings:CreateSection("BEHAVIOR")
-        Settings:CreateToggle({
+        S:CreateSection("BEHAVIOR")
+        S:CreateToggle({
             Name     = "Notifications",
             Default  = true,
             Function = function(v) lib.NotificationsEnabled = v end,
         })
-        Settings:CreateToggle({
+        S:CreateToggle({
             Name     = "Toggle Alerts",
             Default  = true,
             Function = function(v) lib.ToggleAlertsEnabled = v end,
         })
-        Settings:CreateKeybind({
+        S:CreateKeybind({
             Name     = "Menu Keybind",
             Default  = lib.CurrentKeybind,
             Function = function(k) lib.CurrentKeybind = k end,
         })
 
-        Settings:CreateSection("WINDOWS")
-        Settings:CreateOutlineButton({
+        S:CreateSection("WINDOWS")
+        S:CreateOutlineButton({
             Name     = "SORT WINDOWS",
             Function = function() lib:SortWindows() end,
         })
 
-        Settings:CreateSection("PROFILE")
-        Settings:CreateOutlineButton({
+        S:CreateSection("PROFILE")
+        S:CreateOutlineButton({
             Name     = "SAVE SETTINGS",
             Function = function()
                 lib:SaveSettings()
                 lib:Notify("Profile", "Settings saved", 2.5, lib.Theme.Success)
             end,
         })
-        Settings:CreateOutlineButton({
+        S:CreateOutlineButton({
             Name     = "LOAD SETTINGS",
             Function = function()
                 lib:LoadSettings()
@@ -1990,7 +1847,7 @@ function Fihware:CreateMainWindow(config)
             end,
         })
 
-        return Settings
+        return S
     end
 
     return Main
@@ -2007,14 +1864,14 @@ function Fihware:CreateWindow(config)
     local name       = config.Name      or "Window"
     local maxH       = config.MaxHeight or 520
     local elemCount  = 0
-    local accentObjs = {}
+    local accentList = {}
 
     local TB_H = 44
 
     local win = Instance.new("Frame")
     win.Name             = name .. "Window"
     win.Size             = UDim2.new(0, lib.WindowWidth, 0, TB_H)
-    win.Position         = UDim2.new(0, -lib.WindowWidth - 40, 0, 8)
+    win.Position         = UDim2.new(0, -lib.WindowWidth - 60, 0, 8)
     win.BackgroundColor3 = lib.Theme.Surface
     win.BorderSizePixel  = 0
     win.ClipsDescendants = false
@@ -2022,10 +1879,9 @@ function Fihware:CreateWindow(config)
     win.Parent           = lib.ScaleRoot
     corner(win, 8)
     stroke(win, lib.Theme.Border)
-    shadow(win, 0.72)
+    shadow(win)
 
     local tb = Instance.new("Frame")
-    tb.Name             = "Titlebar"
     tb.Size             = UDim2.new(1, 0, 0, TB_H)
     tb.BackgroundColor3 = lib.Theme.Elevated
     tb.BorderSizePixel  = 0
@@ -2040,29 +1896,22 @@ function Fihware:CreateWindow(config)
     tbCover.BorderSizePixel  = 0
     tbCover.Parent           = tb
 
-    local tbDivider = Instance.new("Frame")
-    tbDivider.Size             = UDim2.new(1, 0, 0, 1)
-    tbDivider.Position         = UDim2.new(0, 0, 1, 0)
-    tbDivider.BackgroundColor3 = lib.Theme.Border
-    tbDivider.BorderSizePixel  = 0
-    tbDivider.ZIndex           = 3
-    tbDivider.Parent           = tb
+    local tbDiv = Instance.new("Frame")
+    tbDiv.Size             = UDim2.new(1, 0, 0, 1)
+    tbDiv.Position         = UDim2.new(0, 0, 1, 0)
+    tbDiv.BackgroundColor3 = lib.Theme.Border
+    tbDiv.BorderSizePixel  = 0
+    tbDiv.ZIndex           = 3
+    tbDiv.Parent           = tb
 
     local iconOffset = 14
     if config.Icon then
-        local sizeV = config.IconSize or 16
-        local icn = Instance.new("ImageLabel")
-        icn.Size                   = UDim2.new(0, sizeV, 0, sizeV)
-        icn.AnchorPoint            = Vector2.new(0, 0.5)
-        icn.Position               = UDim2.new(0, 14, 0.5, 0)
-        icn.BackgroundTransparency = 1
-        icn.Image                  = config.Icon
-        icn.ImageColor3            = lib.Theme.Accent
-        icn.ScaleType              = Enum.ScaleType.Fit
-        icn.ZIndex                 = 3
-        icn.Parent                 = tb
-        table.insert(accentObjs, { obj = icn, type = "ImageColor3" })
-        iconOffset = 14 + sizeV + 9
+        local sz  = config.IconSize or 16
+        local icn = makeIcon(tb, config.Icon, sz, lib.Theme.Accent, 3)
+        icn.AnchorPoint = Vector2.new(0, 0.5)
+        icn.Position    = UDim2.new(0, 14, 0.5, 0)
+        table.insert(accentList, { obj = icn, prop = "ImageColor3" })
+        iconOffset = 14 + sz + 9
     end
 
     local titleLbl = Instance.new("TextLabel")
@@ -2078,7 +1927,6 @@ function Fihware:CreateWindow(config)
     titleLbl.Parent                 = tb
 
     local scroll = Instance.new("ScrollingFrame")
-    scroll.Name                   = "Content"
     scroll.Size                   = UDim2.new(1, 0, 1, -TB_H)
     scroll.Position               = UDim2.new(0, 0, 0, TB_H)
     scroll.BackgroundTransparency = 1
@@ -2088,7 +1936,7 @@ function Fihware:CreateWindow(config)
     scroll.CanvasSize             = UDim2.new(0, 0, 0, 0)
     scroll.ClipsDescendants       = true
     scroll.Parent                 = win
-    table.insert(accentObjs, { obj = scroll, type = "ScrollBarImageColor3" })
+    table.insert(accentList, { obj = scroll, prop = "ScrollBarImageColor3" })
 
     local contentList = listLayout(scroll, 4)
     pad(scroll, 10, 10, 10, 10)
@@ -2096,15 +1944,14 @@ function Fihware:CreateWindow(config)
     local function refreshSize()
         local ch = contentList.AbsoluteContentSize.Y + 24
         scroll.CanvasSize = UDim2.new(0, 0, 0, ch)
-        local targetH = math.min(ch + TB_H, maxH)
-        tween(win, { Size = UDim2.new(0, lib.WindowWidth, 0, targetH) }, 0.2)
+        tw(win, { Size = UDim2.new(0, lib.WindowWidth, 0, math.min(ch + TB_H, maxH)) }, 0.2)
     end
     contentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(refreshSize)
 
     local Win = {
-        Frame          = win,
-        _accentObjects = accentObjs,
-        _wantsVisible  = false,
+        Frame        = win,
+        _accentList  = accentList,
+        _wantsVisible = false,
     }
     table.insert(lib.Windows, Win)
 
@@ -2115,56 +1962,36 @@ function Fihware:CreateWindow(config)
         if val then
             lib:SortWindows()
         else
-            local curPos    = win.Position
-            local closeInfo = TweenInfo.new(0.13, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-            TweenService:Create(win, closeInfo, {
-                Position = UDim2.new(0, curPos.X.Offset + 12, 0, curPos.Y.Offset),
-            }):Play()
+            local pos = win.Position
+            TweenService:Create(win,
+                TweenInfo.new(0.12, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+                { Position = UDim2.new(0, pos.X.Offset + 14, 0, pos.Y.Offset) }
+            ):Play()
 
-            lib:SortWindows()
-
-            task.delay(0.14, function()
+            task.delay(0.13, function()
                 if not Win._wantsVisible then
                     win.Visible  = false
-                    win.Position = UDim2.new(0, -lib.WindowWidth - 40, 0, 8)
+                    win.Position = UDim2.new(0, -lib.WindowWidth - 60, 0, 8)
                 end
             end)
+
+            lib:SortWindows()
         end
     end
 
-    function Win:IsVisible() return Win._wantsVisible end
-    function Win:GetFrame() return win end
+    function Win:IsVisible()  return Win._wantsVisible end
+    function Win:GetFrame()   return win end
 
-    function Win:CreateLabel(cfg)
-        elemCount = elemCount + 1; return W.label(lib, scroll, elemCount, cfg)
-    end
-    function Win:CreateSection(sName)
-        elemCount = elemCount + 1; return W.section(lib, scroll, elemCount, sName)
-    end
-    function Win:CreateToggle(cfg)
-        elemCount = elemCount + 1; return W.toggle(lib, scroll, elemCount, accentObjs, cfg)
-    end
-    function Win:CreateSlider(cfg)
-        elemCount = elemCount + 1; return W.slider(lib, scroll, elemCount, accentObjs, cfg)
-    end
-    function Win:CreateDropdown(cfg)
-        elemCount = elemCount + 1; return W.dropdown(lib, scroll, elemCount, accentObjs, cfg)
-    end
-    function Win:CreateButton(cfg)
-        elemCount = elemCount + 1; return W.button(lib, scroll, elemCount, accentObjs, cfg)
-    end
-    function Win:CreateOutlineButton(cfg)
-        elemCount = elemCount + 1; return W.outlineButton(lib, scroll, elemCount, accentObjs, cfg)
-    end
-    function Win:CreateTextBox(cfg)
-        elemCount = elemCount + 1; return W.textbox(lib, scroll, elemCount, accentObjs, cfg)
-    end
-    function Win:CreateColorSlider(cfg)
-        elemCount = elemCount + 1; return W.colorSlider(lib, scroll, elemCount, accentObjs, cfg)
-    end
-    function Win:CreateKeybind(cfg)
-        elemCount = elemCount + 1; return W.keybind(lib, scroll, elemCount, accentObjs, cfg)
-    end
+    function Win:CreateLabel(cfg)         elemCount += 1; return W.label(lib, scroll, elemCount, cfg) end
+    function Win:CreateSection(n)         elemCount += 1; return W.section(lib, scroll, elemCount, n) end
+    function Win:CreateToggle(cfg)        elemCount += 1; return W.toggle(lib, scroll, elemCount, accentList, cfg) end
+    function Win:CreateSlider(cfg)        elemCount += 1; return W.slider(lib, scroll, elemCount, accentList, cfg) end
+    function Win:CreateDropdown(cfg)      elemCount += 1; return W.dropdown(lib, scroll, elemCount, accentList, cfg) end
+    function Win:CreateButton(cfg)        elemCount += 1; return W.button(lib, scroll, elemCount, accentList, cfg) end
+    function Win:CreateOutlineButton(cfg) elemCount += 1; return W.outlineButton(lib, scroll, elemCount, accentList, cfg) end
+    function Win:CreateTextBox(cfg)       elemCount += 1; return W.textbox(lib, scroll, elemCount, accentList, cfg) end
+    function Win:CreateColorSlider(cfg)   elemCount += 1; return W.colorSlider(lib, scroll, elemCount, accentList, cfg) end
+    function Win:CreateKeybind(cfg)       elemCount += 1; return W.keybind(lib, scroll, elemCount, accentList, cfg) end
 
     return Win
 end
