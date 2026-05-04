@@ -57,7 +57,7 @@ local failedEggs    = {}
 local MAX_EGG_FAILS = 3
 
 -- ============================================================
---  ANTI-AFK (Exact method you wanted)
+--  ANTI-AFK
 -- ============================================================
 local antiAFKConn = nil
 
@@ -69,11 +69,7 @@ local function startAntiAFK()
             VirtualUser:CaptureController()
             VirtualUser:ClickButton2(Vector2.new())
         end)
-        Rayfield:Notify({
-            Title = "Anti-AFK Triggered",
-            Content = "Roblox tried kicking you but I didnt let them!",
-            Duration = 3
-        })
+        Rayfield:Notify({ Title = "Anti-AFK Triggered", Content = "Roblox tried kicking you!", Duration = 3 })
     end)
 end
 
@@ -111,7 +107,7 @@ local function getCurrencyText()
 end
 
 -- ============================================================
---  ELAPSED TIME WITH HOURS
+--  ELAPSED TIME
 -- ============================================================
 local function getElapsedTime()
     if macroStartTime <= 0 then return "0h 0m 0s" end
@@ -119,7 +115,6 @@ local function getElapsedTime()
     local hours   = math.floor(elapsed / 3600)
     local minutes = math.floor((elapsed % 3600) / 60)
     local seconds = math.floor(elapsed % 60)
-    
     if hours > 0 then
         return string.format("%dh %dm %ds", hours, minutes, seconds)
     else
@@ -175,7 +170,6 @@ local function createWaypointVisual(position, index, total, isJump)
         local rayParams    = RaycastParams.new()
         rayParams.FilterType = Enum.RaycastFilterType.Exclude
         rayParams.FilterDescendantsInstances = { character, folder }
-
         local result = Workspace:Raycast(rayOrigin, rayDirection, rayParams)
         markerY = result and (result.Position.Y + 0.1) or (position.Y + 0.1)
     else
@@ -270,14 +264,12 @@ local function createWaypointVisuals(waypoints)
     clearWaypoints()
     local total = #waypoints
     local parts = {}
-
     for i = 2, total do
         local wp     = waypoints[i]
         local isJump = wp.Action == Enum.PathWaypointAction.Jump
         local part   = createWaypointVisual(wp.Position, i, total, isJump)
         parts[i]     = part
     end
-
     for i = 2, total - 1 do
         if parts[i] and parts[i + 1] then
             local col = waypointColor(i, total, waypoints[i].Action == Enum.PathWaypointAction.Jump)
@@ -300,11 +292,10 @@ local function highlightCurrentWaypoint(wpIndex)
 end
 
 -- ============================================================
---  WEBHOOK (with Hours support)
+--  WEBHOOK
 -- ============================================================
 local function sendWebhook(eggName)
     if not cfg.webhookEnabled or cfg.webhookUrl == "" then return end
-
     task.spawn(function()
         local ping       = cfg.webhookPingId ~= "" and ("<@" .. cfg.webhookPingId .. "> ") or ""
         local current    = getCurrencyText()
@@ -328,7 +319,6 @@ local function sendWebhook(eggName)
         }
 
         local body = HttpService:JSONEncode({ content = ping, embeds = { embed } })
-
         pcall(function()
             if syn and syn.request then
                 syn.request({ Url = cfg.webhookUrl, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = body })
@@ -348,11 +338,9 @@ local function sendTestWebhook()
         Rayfield:Notify({ Title = "Error", Content = "Enter Webhook URL first!", Duration = 5 })
         return
     end
-
     task.spawn(function()
         local ping    = cfg.webhookPingId ~= "" and ("<@" .. cfg.webhookPingId .. "> ") or ""
         local current = getCurrencyText()
-
         local embed = {
             title  = "🥚 Test Egg Collected!",
             color  = 0x00aaff,
@@ -367,9 +355,7 @@ local function sendTestWebhook()
             footer    = { text = "Sol's RNG" },
             timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
         }
-
         local body = HttpService:JSONEncode({ content = ping, embeds = { embed } })
-
         pcall(function()
             if syn and syn.request then
                 syn.request({ Url = cfg.webhookUrl, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = body })
@@ -382,7 +368,6 @@ local function sendTestWebhook()
             end
         end)
     end)
-
     Rayfield:Notify({ Title = "✅ Test Sent", Content = "Test webhook sent.", Duration = 4 })
 end
 
@@ -438,14 +423,12 @@ local function updateESP()
     local now = tick()
     if now - lastESPUpdate < 1.5 then return end
     lastESPUpdate = now
-
     for egg, hl in pairs(eggHighlights) do
         if not egg.Parent or not isEgg(egg.Name) then
             if hl and hl.Parent then hl:Destroy() end
             eggHighlights[egg] = nil
         end
     end
-
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("BasePart") and isEgg(obj.Name) and not eggHighlights[obj] then
             createEggESP(obj)
@@ -491,12 +474,17 @@ end
 -- ============================================================
 --  PATHFINDING
 -- ============================================================
-local ARRIVE_DIST       = 5.2
-local ARRIVE_DIST_AIR   = 12
-local JUMP_TRIGGER_DIST = 5.5
-local STUCK_TIME        = 2.5
-local STUCK_MINDIST     = 1.2
-local WP_TIMEOUT        = 12
+
+local ARRIVE_DIST       = 4.5
+local ARRIVE_DIST_AIR   = 10
+local JUMP_TRIGGER_DIST = 4.5
+local WP_TIMEOUT        = 8
+local MAX_RECOMPUTES    = 4
+local TICK_RATE         = 0.05
+
+local STUCK_WINDOW      = 1.8
+local STUCK_THRESHOLD   = 1.0
+local STUCK_JUMP_TRIES  = 2
 
 local function setupHumanoid(hum)
     if hum then
@@ -517,130 +505,199 @@ local function waitForLanding(timeout)
     end
 end
 
+-- FIX: fires jump instantly and returns — never pauses walking
 local function safeJump()
-    if not isGrounded() then
-        waitForLanding(0.8)
-    end
-    if isGrounded() then
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-    end
+    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 end
 
 local function computePath(from, to)
     local path = PathfindingService:CreatePath(PATH_PARAMS)
     local ok   = pcall(function() path:ComputeAsync(from, to) end)
     if not ok or path.Status ~= Enum.PathStatus.Success then return nil end
+    local wps = path:GetWaypoints()
+    if #wps < 2 then return nil end
     return path
 end
 
-local function walkToEgg(egg)
-    if not egg or not root then return false end
-    clearWaypoints()
+local posHistory = {}
 
-    local path = computePath(root.Position, egg.Position)
-    if not path then return false end
-
-    local waypoints = path:GetWaypoints()
-    local wpIndex   = 2
-    local totalWPs  = #waypoints
-    if totalWPs < 2 then return true end
-
-    if cfg.showWaypoints then createWaypointVisuals(waypoints) end
-
-    local blocked     = false
-    local blockedConn = path.Blocked:Connect(function(idx)
-        if idx >= wpIndex then blocked = true end
-    end)
-
-    local function issueMove(wp)
-        humanoid:MoveTo(wp.Position)
+local function recordPosition()
+    local now = tick()
+    table.insert(posHistory, { pos = root.Position, t = now })
+    while posHistory[1] and (now - posHistory[1].t) > STUCK_WINDOW + 0.1 do
+        table.remove(posHistory, 1)
     end
-
-    issueMove(waypoints[wpIndex])
-
-    local stuckClock = tick()
-    local lastPos    = root.Position
-    local wpClock    = tick()
-
-    while cfg.enabled and egg.Parent do
-        local currentWP = waypoints[wpIndex]
-        local airborne  = not isGrounded()
-        local isJumpWP  = currentWP.Action == Enum.PathWaypointAction.Jump
-
-        local distToWP = (
-            Vector3.new(root.Position.X, 0, root.Position.Z)
-          - Vector3.new(currentWP.Position.X, 0, currentWP.Position.Z)
-        ).Magnitude
-
-        local threshold = airborne and ARRIVE_DIST_AIR or ARRIVE_DIST
-
-        if distToWP <= threshold then
-            if isJumpWP then
-                if distToWP > JUMP_TRIGGER_DIST then
-                    task.wait(0.06)
-                    continue
-                end
-                safeJump()
-                waitForLanding(1.5)
-            end
-
-            wpIndex += 1
-            if wpIndex > totalWPs then
-                blockedConn:Disconnect()
-                clearWaypoints()
-                return true
-            end
-            issueMove(waypoints[wpIndex])
-            highlightCurrentWaypoint(wpIndex)
-            wpClock = tick()
-        end
-
-        if blocked or (tick() - wpClock > WP_TIMEOUT) then
-            blocked = false
-            blockedConn:Disconnect()
-
-            if airborne then waitForLanding(1.5) end
-
-            path = computePath(root.Position, egg.Position)
-            if not path then clearWaypoints() return false end
-
-            waypoints = path:GetWaypoints()
-            totalWPs  = #waypoints
-            wpIndex   = 2
-            if totalWPs < 2 then clearWaypoints() return true end
-
-            blockedConn = path.Blocked:Connect(function(idx)
-                if idx >= wpIndex then blocked = true end
-            end)
-
-            if cfg.showWaypoints then createWaypointVisuals(waypoints) end
-            issueMove(waypoints[wpIndex])
-            highlightCurrentWaypoint(wpIndex)
-            wpClock = tick()
-        end
-
-        if not airborne then
-            local now = root.Position
-            if (now - lastPos).Magnitude > STUCK_MINDIST then
-                lastPos    = now
-                stuckClock = tick()
-            elseif tick() - stuckClock >= STUCK_TIME then
-                safeJump()
-                stuckClock = tick()
-            end
-        else
-            stuckClock = tick()
-            lastPos    = root.Position
-        end
-
-        task.wait(0.06)
-    end
-
-    blockedConn:Disconnect()
-    clearWaypoints()
-    return false
 end
 
+local function isStuck()
+    if #posHistory < 2 then return false end
+    local oldest = posHistory[1]
+    if (tick() - oldest.t) < STUCK_WINDOW then return false end
+    local dist = (root.Position - oldest.pos).Magnitude
+    return dist < STUCK_THRESHOLD
+end
+
+local function clearPosHistory()
+    posHistory = {}
+end
+
+-- Returns: "success" | "failed" | "abort"
+local function walkToEgg(egg)
+    if not egg or not root then return "failed" end
+    clearWaypoints()
+    clearPosHistory()
+
+    local recomputeCount = 0
+    local jumpAttempts   = 0
+
+    local function doRecompute()
+        recomputeCount += 1
+        if recomputeCount > MAX_RECOMPUTES then
+            return false
+        end
+        clearWaypoints()
+        clearPosHistory()
+        return true
+    end
+
+    while cfg.enabled and egg.Parent do
+        local path = computePath(root.Position, egg.Position)
+        if not path then
+            return "failed"
+        end
+
+        local waypoints = path:GetWaypoints()
+        local totalWPs  = #waypoints
+        local wpIndex   = 2
+
+        if cfg.showWaypoints then createWaypointVisuals(waypoints) end
+
+        local blocked     = false
+        local blockedConn = path.Blocked:Connect(function(idx)
+            if idx >= wpIndex then blocked = true end
+        end)
+
+        local wpClock = tick()
+
+        humanoid:MoveTo(waypoints[wpIndex].Position)
+
+        while cfg.enabled and egg.Parent do
+            recordPosition()
+
+            local wp        = waypoints[wpIndex]
+            local isJumpWP  = wp.Action == Enum.PathWaypointAction.Jump
+            local airborne  = not isGrounded()
+
+            local flat = function(v)
+                return Vector3.new(v.X, 0, v.Z)
+            end
+
+            local distToWP = (flat(root.Position) - flat(wp.Position)).Magnitude
+
+            -- ── WAYPOINT ARRIVAL ────────────────────────────────
+            local threshold = airborne and ARRIVE_DIST_AIR or ARRIVE_DIST
+
+            if distToWP <= threshold then
+                if isJumpWP then
+                    if distToWP > JUMP_TRIGGER_DIST then
+                        -- Not close enough to the jump point yet, keep walking
+                        humanoid:MoveTo(wp.Position)
+                        task.wait(TICK_RATE)
+                        continue
+                    end
+                    -- FIX: fire jump and immediately continue — no waitForLanding
+                    safeJump()
+                    jumpAttempts = 0
+                end
+
+                wpIndex += 1
+                if wpIndex > totalWPs then
+                    blockedConn:Disconnect()
+                    clearWaypoints()
+                    clearPosHistory()
+                    return "success"
+                end
+
+                humanoid:MoveTo(waypoints[wpIndex].Position)
+                highlightCurrentWaypoint(wpIndex)
+                wpClock = tick()
+                clearPosHistory()
+                task.wait(TICK_RATE)
+                continue
+            end
+
+            -- ── BLOCKED / TIMED OUT → RECOMPUTE ─────────────────
+            if blocked or (tick() - wpClock > WP_TIMEOUT) then
+                blocked = false
+                blockedConn:Disconnect()
+
+                -- FIX: removed waitForLanding here — don't pause movement
+
+                if not doRecompute() then
+                    Rayfield:Notify({
+                        Title    = "⚠️ Stuck — Resetting",
+                        Content  = "Can't reach " .. egg.Name .. ", skipping.",
+                        Duration = 5
+                    })
+                    clearWaypoints()
+                    clearPosHistory()
+                    return "abort"
+                end
+
+                break
+            end
+
+            -- Re-issue MoveTo every tick so it's never silently dropped mid-air
+            humanoid:MoveTo(wp.Position)
+
+            -- ── STUCK DETECTION ──────────────────────────────────
+            if not airborne and isStuck() then
+                clearPosHistory()
+                jumpAttempts += 1
+
+                if jumpAttempts > STUCK_JUMP_TRIES then
+                    blockedConn:Disconnect()
+                    Rayfield:Notify({
+                        Title    = "⚠️ Stuck — Resetting",
+                        Content  = "Couldn't un-stick for " .. egg.Name .. ", skipping.",
+                        Duration = 5
+                    })
+                    clearWaypoints()
+                    clearPosHistory()
+                    return "abort"
+                end
+
+                -- FIX: jump to un-stick but don't wait for landing before recompute
+                safeJump()
+                task.wait(0.4)
+
+                blockedConn:Disconnect()
+                if not doRecompute() then
+                    Rayfield:Notify({
+                        Title    = "⚠️ Stuck — Resetting",
+                        Content  = "Can't reach " .. egg.Name .. ", skipping.",
+                        Duration = 5
+                    })
+                    clearWaypoints()
+                    clearPosHistory()
+                    return "abort"
+                end
+
+                break
+            end
+
+            task.wait(TICK_RATE)
+        end
+
+        blockedConn:Disconnect()
+    end
+
+    clearWaypoints()
+    clearPosHistory()
+    return "failed"
+end
+
+-- Full character reset (death respawn)
 local function resetCharacter()
     if humanoid then humanoid.Health = 0 end
     local nc  = player.CharacterAdded:Wait()
@@ -648,7 +705,8 @@ local function resetCharacter()
     humanoid  = nc:WaitForChild("Humanoid")
     root      = nc:WaitForChild("HumanoidRootPart")
     setupHumanoid(humanoid)
-    task.wait(1.6)
+    task.wait(1.8)
+    clearPosHistory()
 end
 
 -- ============================================================
@@ -729,8 +787,8 @@ task.spawn(function()
         updateESP()
 
         if not cfg.enabled or isProcessing or not root then
-            if not cfg.enabled then 
-                clearWaypoints() 
+            if not cfg.enabled then
+                clearWaypoints()
                 stopAntiAFK()
             end
             continue
@@ -741,22 +799,34 @@ task.spawn(function()
 
         isProcessing = true
         preEggCurrency = getCurrencyText()
-        Rayfield:Notify({ Title = "Moving", Content = "Walking to egg...", Duration = 2 })
+        Rayfield:Notify({ Title = "Moving", Content = "Walking to " .. egg.Name, Duration = 2 })
 
-        local success = walkToEgg(egg)
+        local result = walkToEgg(egg)
 
-        if not success then
+        if result == "abort" then
+            failedEggs[egg] = MAX_EGG_FAILS + 1
+            removeEggESP(egg)
+            task.spawn(resetCharacter)
+            isProcessing = false
+            continue
+        end
+
+        if result == "failed" then
             failedEggs[egg] = (failedEggs[egg] or 0) + 1
             if failedEggs[egg] >= MAX_EGG_FAILS then
                 Rayfield:Notify({
                     Title    = "⚠️ Skipping Egg",
-                    Content  = egg.Name .. " is unreachable, moving on",
+                    Content  = egg.Name .. " is unreachable after " .. MAX_EGG_FAILS .. " tries",
                     Duration = 5
                 })
+                removeEggESP(egg)
             end
+            isProcessing = false
+            continue
         end
 
-        if success and egg.Parent and cfg.enabled then
+        -- result == "success"
+        if egg.Parent and cfg.enabled then
             local prompt = findPrompt(egg)
             if prompt then interact(prompt) end
 
@@ -798,6 +868,7 @@ player.CharacterAdded:Connect(function(nc)
     setupHumanoid(humanoid)
     isProcessing = false
     clearWaypoints()
+    clearPosHistory()
 end)
 
 Workspace.DescendantRemoving:Connect(function(obj)
